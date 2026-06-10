@@ -36,6 +36,10 @@ class TasteProfile:
         self.blacklist: set[int] = set()
         # 已关注 UP主列表（用于排除）
         self.followed_mids: set[int] = set()
+        # 交流提炼维度（v1.0 → v1.1）
+        self.criticism_tolerance: str = "factual_only"  # 批判风格容忍度
+        self.claim_density_min: float = 0.5             # 最低断言密度（每千字）
+        self.vague_intro_penalty: bool = True            # 模糊开篇惩罚开关
 
     # ── 序列化 ────────────────────────────
 
@@ -49,6 +53,9 @@ class TasteProfile:
             "depth_threshold": self.depth_threshold,
             "blacklist": list(self.blacklist),
             "followed_mids": list(self.followed_mids),
+            "criticism_tolerance": self.criticism_tolerance,
+            "claim_density_min": self.claim_density_min,
+            "vague_intro_penalty": self.vague_intro_penalty,
         }
 
     @classmethod
@@ -62,6 +69,9 @@ class TasteProfile:
         p.depth_threshold = data.get("depth_threshold", 0.7)
         p.blacklist = set(data.get("blacklist", []))
         p.followed_mids = set(data.get("followed_mids", []))
+        p.criticism_tolerance = data.get("criticism_tolerance", "factual_only")
+        p.claim_density_min = data.get("claim_density_min", 0.5)
+        p.vague_intro_penalty = data.get("vague_intro_penalty", True)
         return p
 
     # ── 话题提取 ────────────────────────────
@@ -124,3 +134,15 @@ class TasteProfile:
 
     def is_blacklisted(self, mid: int) -> bool:
         return mid in self.blacklist
+
+    def get_criticism_tolerance(self) -> str:
+        """获取批判风格容忍度：factual_only / moderate / lenient"""
+        return getattr(self, 'criticism_tolerance', 'factual_only')
+
+    def get_claim_density_min(self) -> float:
+        """获取最低断言密度要求（每千字可验证断言数）"""
+        return getattr(self, 'claim_density_min', 0.5)
+
+    def get_vague_intro_penalty(self) -> bool:
+        """是否对模糊开篇降权"""
+        return getattr(self, 'vague_intro_penalty', True)

@@ -102,6 +102,21 @@ def _calc_l1_score(c: dict[str, Any], taste: TasteProfile, cfg: Any) -> float:
     if play > 1000:
         score += 0.05  # 有一定受众基础
 
+    # 断言密度检查（根据用户画像的 claim_density_min）
+    assertion_patterns = [
+        r"(证据|数据|统计|调查|研究|文献|史料|档案)",
+        r"(例如|比如|举个|案例|例子)",
+        r"(具体|实际|真实|确实|确凿)",
+        r"(数字|百分比|倍|万人|亿元|年[间代])",
+    ]
+    assertion_count = sum(len(re.findall(p, text)) for p in assertion_patterns)
+    assertion_density = assertion_count / text_len * 1000  # 每千字断言数
+    claim_min = taste.get_claim_density_min() if hasattr(taste, 'get_claim_density_min') else 0.5
+    if assertion_density < claim_min:
+        # 断言不足 → 惩罚（最多扣 0.20）
+        penalty = min((claim_min - assertion_density) / claim_min * 0.20, 0.20)
+        score -= penalty
+
     return max(0.0, min(1.0, score))
 
 
@@ -141,7 +156,7 @@ def score_l2(candidates: list[dict[str, Any]], taste: TasteProfile) -> list[dict
         half = len(subtitle) // 2
         sample = subtitle[:1000] + subtitle[half:half + 1000] if half > 1000 else subtitle
 
-        score = _calc_l2_score(sample)
+        score = _calc_l2_score(sample, taste)
         if score < cfg.l2_score_cutoff:
             continue  # [C6] 不及格丢弃
 
@@ -154,7 +169,7 @@ def score_l2(candidates: list[dict[str, Any]], taste: TasteProfile) -> list[dict
     return survivors
 
 
-def _calc_l2_score(text: str) -> float:
+def _calc_l2_score(text: str, taste=None) -> float:
     """基于字幕骨架分析的 L2 分（0-1）。"""
     score = 0.0
 
@@ -195,6 +210,21 @@ def _calc_l2_score(text: str) -> float:
     elif filler_ratio > 1:
         density_score = 0.18
     score += density_score
+
+    # 断言密度检查（根据用户画像的 claim_density_min）
+    assertion_patterns = [
+        r"(证据|数据|统计|调查|研究|文献|史料|档案)",
+        r"(例如|比如|举个|案例|例子)",
+        r"(具体|实际|真实|确实|确凿)",
+        r"(数字|百分比|倍|万人|亿元|年[间代])",
+    ]
+    assertion_count = sum(len(re.findall(p, text)) for p in assertion_patterns)
+    assertion_density = assertion_count / text_len * 1000  # 每千字断言数
+    claim_min = taste.get_claim_density_min() if hasattr(taste, 'get_claim_density_min') else 0.5
+    if assertion_density < claim_min:
+        # 断言不足 → 惩罚（最多扣 0.20）
+        penalty = min((claim_min - assertion_density) / claim_min * 0.20, 0.20)
+        score -= penalty
 
     return max(0.0, min(1.0, score))
 
@@ -237,6 +267,37 @@ def _calc_l3_score(subtitle: str, meta: dict[str, Any], taste: TasteProfile) -> 
     if has_conclusion:
         score += 0.10
 
+    # 模糊开篇惩罚（根据用户画像的 vague_intro_penalty）
+    if hasattr(taste, 'get_vague_intro_penalty') and taste.get_vague_intro_penalty():
+        # 检测模糊开篇：开头200字内没有具体论点或断言
+        intro_text = subtitle[:200]
+        has_specific = bool(re.search(
+            r"(证据|数据|例如|比如|具体|实际|案例|数字|%|\d+年|\d+%|\d+万|\d+亿)",
+            intro_text
+        ))
+        if not has_specific:
+            # 模糊开篇 → 根据画像偏好降权
+            score -= 0.08  # 降权幅度
+
+    # 批判风格评分（根据用户画像的 criticism_tolerance）
+    if hasattr(taste, 'get_criticism_tolerance'):
+        tol = taste.get_criticism_tolerance()
+        if tol == 'factual_only':
+            # 检测情绪化批判词
+            emotional_critique = sum(1 for w in [
+                "垃圾", "恶心", "傻逼", "脑残", "废物", "搞笑的吧",
+                "笑死", "无语", "离谱他妈", "什么鬼", "太扯了"
+            ] if w in subtitle[:1000])
+            if emotional_critique >= 2:
+                score -= 0.12  # 情绪化批判 → 降权
+            # 奖励基于事实的批判
+            factual_critique = sum(1 for w in [
+                "事实上", "实际上", "数据", "证据", "史料",
+                "根据", "来源", "出处", "原文", "考证"
+            ] if w in subtitle[:1000])
+            if factual_critique >= 3:
+                score += 0.08  # 事实驱动批判 → 加分
+
     # 跨域连接深度
     cross_patterns = [
         r"(就像|好比|跟.*一样|类似于)", r"(放到今天|放在现在|跟现代)",
@@ -266,6 +327,21 @@ def _calc_l3_score(subtitle: str, meta: dict[str, Any], taste: TasteProfile) -> 
     # UP主匹配加分（非已关注UP主的额外好感）
     mid = meta.get("up_mid", 0)
     score += taste.up_weights.get(mid, 0.0) * 0.15
+
+    # 断言密度检查（根据用户画像的 claim_density_min）
+    assertion_patterns = [
+        r"(证据|数据|统计|调查|研究|文献|史料|档案)",
+        r"(例如|比如|举个|案例|例子)",
+        r"(具体|实际|真实|确实|确凿)",
+        r"(数字|百分比|倍|万人|亿元|年[间代])",
+    ]
+    assertion_count = sum(len(re.findall(p, text)) for p in assertion_patterns)
+    assertion_density = assertion_count / text_len * 1000  # 每千字断言数
+    claim_min = taste.get_claim_density_min() if hasattr(taste, 'get_claim_density_min') else 0.5
+    if assertion_density < claim_min:
+        # 断言不足 → 惩罚（最多扣 0.20）
+        penalty = min((claim_min - assertion_density) / claim_min * 0.20, 0.20)
+        score -= penalty
 
     return max(0.0, min(1.0, score))
 
