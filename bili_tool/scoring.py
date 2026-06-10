@@ -101,22 +101,6 @@ def _calc_l1_score(c: dict[str, Any], taste: TasteProfile, cfg: Any) -> float:
     play = c.get("play_count", 0)
     if play > 1000:
         score += 0.05  # 有一定受众基础
-
-    # 断言密度检查（根据用户画像的 claim_density_min）
-    assertion_patterns = [
-        r"(证据|数据|统计|调查|研究|文献|史料|档案)",
-        r"(例如|比如|举个|案例|例子)",
-        r"(具体|实际|真实|确实|确凿)",
-        r"(数字|百分比|倍|万人|亿元|年[间代])",
-    ]
-    assertion_count = sum(len(re.findall(p, text)) for p in assertion_patterns)
-    assertion_density = assertion_count / text_len * 1000  # 每千字断言数
-    claim_min = taste.get_claim_density_min() if hasattr(taste, 'get_claim_density_min') else 0.5
-    if assertion_density < claim_min:
-        # 断言不足 → 惩罚（最多扣 0.20）
-        penalty = min((claim_min - assertion_density) / claim_min * 0.20, 0.20)
-        score -= penalty
-
     return max(0.0, min(1.0, score))
 
 
@@ -299,10 +283,9 @@ def _calc_l2_score(text: str, taste=None) -> float:
         r"(数字|百分比|倍|万人|亿元|年[间代])",
     ]
     assertion_count = sum(len(re.findall(p, text)) for p in assertion_patterns)
-    assertion_density = assertion_count / text_len * 1000  # 每千字断言数
+    assertion_density = assertion_count / text_len * 1000
     claim_min = taste.get_claim_density_min() if hasattr(taste, 'get_claim_density_min') else 0.5
     if assertion_density < claim_min:
-        # 断言不足 → 惩罚（最多扣 0.20）
         penalty = min((claim_min - assertion_density) / claim_min * 0.20, 0.20)
         score -= penalty
 
@@ -414,22 +397,6 @@ def _calc_l3_score(subtitle: str, meta: dict[str, Any], taste: TasteProfile) -> 
     # UP主匹配加分（非已关注UP主的额外好感）
     mid = meta.get("up_mid", 0)
     score += taste.up_weights.get(mid, 0.0) * 0.15
-
-    # 断言密度检查（根据用户画像的 claim_density_min）
-    assertion_patterns = [
-        r"(证据|数据|统计|调查|研究|文献|史料|档案)",
-        r"(例如|比如|举个|案例|例子)",
-        r"(具体|实际|真实|确实|确凿)",
-        r"(数字|百分比|倍|万人|亿元|年[间代])",
-    ]
-    assertion_count = sum(len(re.findall(p, text)) for p in assertion_patterns)
-    assertion_density = assertion_count / text_len * 1000  # 每千字断言数
-    claim_min = taste.get_claim_density_min() if hasattr(taste, 'get_claim_density_min') else 0.5
-    if assertion_density < claim_min:
-        # 断言不足 → 惩罚（最多扣 0.20）
-        penalty = min((claim_min - assertion_density) / claim_min * 0.20, 0.20)
-        score -= penalty
-
     return max(0.0, min(1.0, score))
 
 # ── GPU 批量转录 + 打分 ─────────────────────
