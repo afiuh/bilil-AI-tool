@@ -1,0 +1,11 @@
+import base64
+
+# The QR code base64 data from B站 login page
+b64 = "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"
+
+img_data = base64.b64decode(b64)
+path = r"C:\Users\c3458\Desktop\b站扫码登录.png"
+with open(path, 'wb') as f:
+    f.write(img_data)
+print(f"二维码已保存到: {path}")
+print("用手机B站扫这个二维码即可登录")

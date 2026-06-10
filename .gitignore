@@ -1,0 +1,35 @@
+# 敏感文件
+.env
+*.env
+credentials.json
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# 运行时数据
+bili_tool/data/*.db
+bili_tool/*.db
+*.lock
+
+# 临时文件
+/tmp/
+*.log
+.DS_Store
+Thumbs.db
+
+# 模型文件
+*.pt
+*.bin
+*.safetensors
+models/

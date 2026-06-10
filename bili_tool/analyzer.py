@@ -1,0 +1,166 @@
+"""
+B站内容发现工具 — LLM 精校分析模块
+
+用 DeepSeek API 对视频字幕做：
+  1. 精校文本（标点、分段、修正转写错误）
+  2. 逐段批注（💡亮点 / ⚠️不足）
+  3. 总结分析
+  4. 每段留 💬 反馈空位
+"""
+
+import logging
+import re
+from typing import Any
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+# [IO] DeepSeek API 配置
+API_URL = "https://api.deepseek.com/chat/completions"
+
+SYSTEM_PROMPT = """你是一个内容分析助手。给你一段B站视频的字幕（无标点无分段），请完成：
+
+1. **精校文本**：加标点、分逻辑段落、修正明显转写错误（如"沈沛→审配"）
+2. **逐段批注**：每段后标注
+   - 💡 亮点/值得关注的点
+   - ⚠️ 不足/论证漏洞/可疑论断
+3. **总结分析**：
+   - 核心框架（一句话）
+   - 亮点（3-5条）
+   - 不足（3-5条）
+
+输出格式（严格按此模板）：
+
+【第一段：段落标题】
+精校后的文本...
+
+> 💡 批注内容（你的分析）
+> 💬 你的看法：（留空！这是给用户填的，你只写 💬 你的看法： 后面什么都不写）
+
+【第二段：段落标题】
+精校后的文本...
+
+> ⚠️ 批注内容
+> 💬 你的看法：
+
+### 🔍 总结分析
+**核心框架**：...
+**亮点**：...
+**不足**：...
+
+要求：
+- 覆盖全部原文，不要遗漏任何段落
+- 如果原文有逻辑不通处，微调使其通顺
+- 段落标题概括该段主旨
+"""
+
+
+def analyze_subtitle(
+    subtitle: str,
+    api_key: str,
+    video_title: str = "",
+    max_tokens: int = 8000,
+) -> str:
+    """[IO] 调用 DeepSeek API 对字幕做精校分析。"""
+    if not subtitle or len(subtitle) < 50:
+        return "（该视频无字幕或字幕过短，无法分析）"
+
+    # 截断超长字幕（API 上下文限制）
+    if len(subtitle) > 12000:
+        subtitle = subtitle[:12000]
+
+    user_prompt = f"视频标题：{video_title}\n\n原始字幕（无标点）：\n{subtitle}"
+
+    try:
+        resp = requests.post(
+            API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "deepseek-chat",
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "max_tokens": max_tokens,
+                "temperature": 0.3,
+            },
+            timeout=120,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data["choices"][0]["message"]["content"]
+
+    except Exception as e:
+        logger.error(f"LLM 分析失败: {e}")
+        return f"（分析失败: {e}）"
+
+
+def post_analyze_note(note_path: str, api_key: str) -> int:
+    """[IO] 读取笔记，对有字幕的视频逐条精校，更新笔记。
+
+    返回处理的视频数。
+    """
+    content = open(note_path, encoding="utf-8").read()
+
+    # 按视频分段
+    sections = re.split(r"(\n## \d+\. )", content)
+    # sections: [header, "## 1.", video1, "## 2.", video2, ...]
+
+    updated = 0
+    new_parts = [sections[0]]  # header
+
+    for i in range(1, len(sections), 2):
+        if i + 1 >= len(sections):
+            break
+        marker = sections[i]      # "## 1. "
+        body = sections[i + 1]    # everything after
+
+        # 提取标题
+        title_match = re.search(r"(.+?)\n", body)
+        title = title_match.group(1).strip() if title_match else ""
+
+        # 跳过已有完整逐段精校的（不是批量概述）
+        has_detailed = re.search(r"【第[一二三四五六七八九十\d]+段", body)
+        if has_detailed:
+            new_parts.append(marker)
+            new_parts.append(body)
+            continue
+
+        # 找原始字幕
+        sub_match = re.search(r"```text\n(.+?)\n```", body, re.DOTALL)
+        if not sub_match:
+            new_parts.append(marker)
+            new_parts.append(body)
+            continue
+
+        subtitle = sub_match.group(1)
+        logger.info(f"正在分析: {title[:40]} ({len(subtitle)} 字)")
+
+        # [IO] 调 LLM
+        analysis = analyze_subtitle(subtitle, api_key, title)
+
+        # 替换占位符 + 移除原始字幕块
+        old_placeholder = "### 🤖 Hermes 逐段分析\n<!-- 待 Hermes 分析后填充 -->\n> ⏳ 待分析..."
+        old_subtitle_block = re.search(
+            r"### 📜 完整字幕.*?\n```text\n.*?\n```\n\n", body, re.DOTALL
+        )
+
+        if old_placeholder in body:
+            body = body.replace(old_placeholder, f"### 📜 精校文本与批注\n\n{analysis}\n")
+            updated += 1
+
+        if old_subtitle_block:
+            body = body.replace(old_subtitle_block.group(0), "")
+
+        new_parts.append(marker)
+        new_parts.append(body)
+        # 增量保存
+        open(note_path, "w", encoding="utf-8").write("".join(new_parts[1:] if not new_parts[0].strip() else new_parts))
+
+    open(note_path, "w", encoding="utf-8").write("".join(new_parts))
+    logger.info(f"精校完成: {updated} 条视频")
+    return updated
