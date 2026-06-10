@@ -60,7 +60,7 @@ def analyze_subtitle(
     subtitle: str,
     api_key: str,
     video_title: str = "",
-    max_tokens: int = 8000,
+    max_tokens: int = 8192,
 ) -> str:
     """[IO] 调用 DeepSeek API 对字幕做精校分析。"""
     if not subtitle or len(subtitle) < 50:
@@ -92,11 +92,79 @@ def analyze_subtitle(
         )
         resp.raise_for_status()
         data = resp.json()
+        finish_reason = data["choices"][0].get("finish_reason", "")
+        if finish_reason == "length":
+            logger.warning(f"[TRUNCATED] max_tokens={max_tokens} 截断, 字幕{len(subtitle)}字")
         return data["choices"][0]["message"]["content"]
 
     except Exception as e:
         logger.error(f"LLM 分析失败: {e}")
         return f"（分析失败: {e}）"
+
+
+def analyze_subtitle_split(
+    subtitle: str,
+    api_key: str,
+    video_title: str = "",
+) -> str:
+    """长字幕分段精校：正文+批注一调，总结分析一调，避免截断。"""
+    if not subtitle or len(subtitle) < 50:
+        return "（该视频无字幕或字幕过短，无法分析）"
+    if len(subtitle) > 12000:
+        subtitle = subtitle[:12000]
+
+    NL = chr(10)
+    body_prompt = NL.join([
+        f"视频标题：{video_title}",
+        "",
+        "原始字幕（无标点）：",
+        subtitle,
+        "",
+        "请只输出【精校文本】+【逐段批注】部分，不要输出总结分析。",
+    ])
+    summary_prompt = NL.join([
+        f"视频标题：{video_title}",
+        "",
+        f"该视频字幕共 {len(subtitle)} 字，请基于此输出【总结分析】部分：",
+        "1. 核心框架（一句话）",
+        "2. 亮点（3-5条）",
+        "3. 不足（3-5条）",
+        "4. 总体评分和推荐建议",
+    ])
+
+    result_parts = []
+    for label, prompt in [("body", body_prompt), ("summary", summary_prompt)]:
+        try:
+            resp = requests.post(
+                API_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "max_tokens": 8192,
+                    "temperature": 0.3,
+                },
+                timeout=180,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            finish_reason = data["choices"][0].get("finish_reason", "")
+            if finish_reason == "length":
+                logger.warning(
+                    f"[TRUNCATED] 视频《{video_title}》{label}阶段被截断 (finish_reason=length)"
+                )
+            result_parts.append(data["choices"][0]["message"]["content"])
+        except Exception as e:
+            logger.error(f"LLM 分析失败 ({label}): {e}")
+            result_parts.append(f"（{label} 分析失败: {e}）")
+
+    return NL.join(result_parts)
 
 
 def post_analyze_note(note_path: str, api_key: str) -> int:
@@ -141,7 +209,11 @@ def post_analyze_note(note_path: str, api_key: str) -> int:
         logger.info(f"正在分析: {title[:40]} ({len(subtitle)} 字)")
 
         # [IO] 调 LLM
-        analysis = analyze_subtitle(subtitle, api_key, title)
+        if len(subtitle) > 6000:
+            logger.info(f"视频「{title}」字幕{len(subtitle)}字，使用分段精校")
+            analysis = analyze_subtitle_split(subtitle, api_key, title)
+        else:
+            analysis = analyze_subtitle(subtitle, api_key, title)
 
         # 替换占位符 + 移除原始字幕块
         old_placeholder = "### 🤖 Hermes 逐段分析\n<!-- 待 Hermes 分析后填充 -->\n> ⏳ 待分析..."
