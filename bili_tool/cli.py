@@ -294,15 +294,59 @@ def _generate_analysis(subtitle: str, taste: TasteProfile) -> str:
 
 
 def _generate_reason(r: dict[str, Any], taste: TasteProfile) -> str:
-    """生成推荐理由。"""
-    parts = []
+    """生成推荐理由，关联用户画像维度与打分中间值。"""
+    pos: list[str] = []   # 正向理由
+    neg: list[str] = []   # 负向提示
+    dur = r.get("duration_sec", 0)
+    soup = r.get("soup_score", -1)
+
+    # ── 论证质量 ──
+    if soup >= 0 and soup < 0.3:
+        pos.append("论证框架清晰，非鸡汤型内容")
+    elif soup > 0.6:
+        neg.append(f"通篇比喻较多、出处稀少，可能为鸡汤型内容（指数{soup:.1f}）")
+
+    # ── 风格匹配 ──
+    if hasattr(taste, 'get_criticism_tolerance') and taste.get_criticism_tolerance() == 'factual_only':
+        subtitle = r.get("subtitle_text", "")
+        if subtitle:
+            import re
+            has_factual = bool(re.search(r'(证据|数据|史料|考证|出处|根据)', subtitle[:2000]))
+            if has_factual:
+                pos.append("批判基于事实/数据，符合你对论证严谨性的要求")
+            elif soup > 0.4:
+                neg.append("批判力度较弱，谨慎阅读")
+
+    # ── 话题匹配 ──
+    if taste.topics:
+        title = r.get("title", "")
+        top_topic = max(taste.topics, key=taste.topics.get)
+        top_weight = taste.topics[top_topic]
+        topic_keywords = {
+            "历史": ["历史", "朝代", "战争", "制度", "帝国"],
+            "哲学": ["哲学", "思辨", "辩证", "认知", "方法论"],
+            "社会": ["社会", "政治", "权力", "博弈", "阶层"],
+            "影视": ["解读", "影评", "剧评", "电影", "电视剧"],
+        }
+        if top_weight > 0.6 and any(kw in title for kw in topic_keywords.get(top_topic, [])):
+            pos.append(f"属{top_topic}方向，与你的核心偏好高度匹配")
+        else:
+            pos.append(f"{top_topic}方向内容（权重{top_weight:.1f}）")
+
+    # ── 时长 × 深度 ──
+    if dur > 1800:
+        pos.append(f"{dur // 60}分钟长视频，适合深度沉浸")
+    elif dur > 600:
+        pos.append(f"{dur // 60}分钟中等长度")
+
+    # ── UP主 信任度 ──
     mid = r.get("up_mid", 0)
     up_w = taste.up_weights.get(mid, 0)
-    if up_w > 0.3:
-        parts.append(f"你之前收藏过该UP主的内容，信任度较高")
-    if r.get("duration_sec", 0) > 1800:
-        parts.append(f"长视频（{r['duration_sec'] // 60}分钟），符合你对深度内容的需求")
-    parts.append(f"综合评分 {r.get('score_l3', 0):.2f}，L2/L3 分析通过")
+    if up_w > 0.5:
+        pos.insert(0, f"你之前认可过该UP主（信任度{up_w:.1f}）")
+
+    # 组合输出：最多3正向 + 负向在前
+    parts = neg[:1] + pos[:3]
     return "；".join(parts) if parts else "基于口味画像综合匹配"
 
 

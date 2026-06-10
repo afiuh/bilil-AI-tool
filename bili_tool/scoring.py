@@ -160,6 +160,8 @@ def score_l2(candidates: list[dict[str, Any]], taste: TasteProfile) -> list[dict
         if score < cfg.l2_score_cutoff:
             continue  # [C6] 不及格丢弃
 
+        # 存鸡汤指数到候选，供推荐理由生成使用
+        c["soup_score"] = round(score_chicken_soup(sample, taste), 3)
         c["score_l2"] = round(score, 3)
         c["subtitle_text"] = subtitle
         survivors.append(c)
@@ -485,8 +487,11 @@ def score_l2_gpu(candidates, taste):
     for c in candidates:
         subtitle = c.get("subtitle_text", "")
         if subtitle:
-            score = _calc_l2_score(subtitle[:2000] if len(subtitle) > 2000 else subtitle)
+            score = _calc_l2_score(subtitle[:2000] if len(subtitle) > 2000 else subtitle, taste)
             if score >= cfg.l2_score_cutoff:
+                c["soup_score"] = round(score_chicken_soup(
+                    subtitle[:2000] if len(subtitle) > 2000 else subtitle, taste
+                ), 3)
                 c["score_l2"] = round(score, 3)
                 survivors.append(c)
             continue
