@@ -169,6 +169,84 @@ def score_l2(candidates: list[dict[str, Any]], taste: TasteProfile) -> list[dict
     return survivors
 
 
+# ── 鸡汤指数检测 ──────────────────────────
+
+def score_chicken_soup(text: str, taste=None) -> float:
+    """检测学术外衣下的鸡汤/情绪按摩内容。阈值触发制，不越线不计分。"""
+    text_len = max(len(text), 1)
+    paragraphs = [p for p in text.split(chr(10)) if len(p.strip()) > 10]
+    para_count = max(len(paragraphs), 1)
+    negative = 0.0
+    positive = 0.0
+
+    # ① 你字率 — 阈值 0.008
+    you_count = len(re.findall(r'你', text))
+    you_rate = you_count / text_len
+    if you_rate > 0.008:
+        excess = min((you_rate - 0.008) / 0.008, 1.0)
+        negative += excess * 0.25
+
+    # ② 零出处引用（含话题调节）
+    has_book = bool(re.search(r'《.+?》', text))
+    has_year = bool(re.search(r'\d{4}年', text))
+    has_cite = bool(re.search(
+        r'(?<![你我他她它这那的])[一-鿿]{2,4}(?:认为|考证|记载|指出|曾言)',
+        text
+    ))
+    if not (has_book or has_year or has_cite):
+        factor = 1.0
+        if taste and hasattr(taste, 'topics') and taste.topics:
+            top = max(taste.topics, key=taste.topics.get)
+            factor = {'历史': 1.0, '社会': 0.9, '影视': 0.8, '哲学': 0.6}.get(top, 1.0)
+        negative += factor * 0.35
+
+    # ③ 比喻密度 — 阈值 0.5 个/段
+    metaphor_count = len(re.findall(
+        r'就像|如同|是一把|是一座|仿佛|好比|像.{1,3}一样|像是|好似|宛若',
+        text
+    ))
+    metaphor_density = metaphor_count / para_count
+    if metaphor_density > 0.5:
+        excess = (metaphor_density - 0.5) / 0.5
+        normalized = min(excess / 3, 1.0)
+        negative += normalized * 0.20
+
+    # ④ 高情感词密度 — 阈值 1.0/千字
+    emotional_count = len(re.findall(
+        r'痛苦|悲伤|温柔|拥抱|感动|温暖|灵魂|信念|勇气|疗愈|滋养',
+        text
+    ))
+    emotional_density = emotional_count / text_len * 1000
+    if emotional_density > 1.0:
+        excess = min((emotional_density - 1.0) / 1.0, 1.0)
+        negative += excess * 0.10
+
+    # ⑤ 结尾模板（最后500字）
+    tail = text[-500:] if len(text) > 500 else text
+    if re.search(r'愿你|你会发现|真正的.{1,10}是|这就是.{1,10}的|所以.{1,5}请', tail):
+        negative += 0.10
+
+    # ── 正向防御 ──
+    source_count = (
+        len(re.findall(r'《.+?》', text)) +
+        len(re.findall(r'\d{4}年', text)) +
+        len(re.findall(r'(?<![你我他她它这那的])[一-鿿]{2,4}(?:认为|考证|记载|指出|曾言)', text))
+    )
+    source_density = min(source_count / text_len * 1000 / 2, 1.0)
+    positive += source_density * 0.5
+
+    verifiable = len(re.findall(r'\d+[万亿千百%人元次个]', text))
+    verifiable_density = min(verifiable / text_len * 1000 / 2, 1.0)
+    positive += verifiable_density * 0.3
+
+    counter_count = len(re.findall(
+        r'有人认为.{1,20}但是|争议在于|也有人质疑|反对者|批评者',
+        text
+    ))
+    positive += min(counter_count * 0.5, 1.0) * 0.2
+
+    return max(0.0, min(negative - positive * 0.5, 1.0))
+
 def _calc_l2_score(text: str, taste=None) -> float:
     """基于字幕骨架分析的 L2 分（0-1）。"""
     score = 0.0
@@ -225,6 +303,13 @@ def _calc_l2_score(text: str, taste=None) -> float:
         # 断言不足 → 惩罚（最多扣 0.20）
         penalty = min((claim_min - assertion_density) / claim_min * 0.20, 0.20)
         score -= penalty
+
+    # 鸡汤指数检测（阈值触发制）
+    soup = score_chicken_soup(text, taste)
+    if soup > 0.6:
+        soup_penalty = 0.15 + (soup - 0.6) * 0.25
+        score -= soup_penalty
+        logger.debug(f"鸡汤指数={soup:.2f}，扣分={soup_penalty:.2f}")
 
     return max(0.0, min(1.0, score))
 
