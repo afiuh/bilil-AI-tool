@@ -41,12 +41,22 @@ def check_discovery(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     max_pct = topic_hits[max_topic] / total if total > 0 else 0
     ok = max_pct < 0.7
 
+    # 候选标题采样（前10条）
+    title_sample = [c.get("title", "")[:40] for c in candidates[:10]]
+
     return {
         "ok": ok,
         "stage": "发现后",
         "warning": f"话题偏斜：{max_topic}类占{max_pct:.0%}" if not ok else "",
         "summary": f"候选{total}条。{max_topic}类{max_pct:.0%}。分区分布：{dict(partitions.most_common(5))}",
-        "details": {"total": total, "topic_dist": topic_hits, "partition_dist": dict(partitions.most_common(5))},
+        "details": {
+            "total": total,
+            "topic_dist": topic_hits,
+            "partition_dist": dict(partitions.most_common(5)),
+            "title_sample": title_sample,
+            "max_topic": max_topic,
+            "max_pct": f"{max_pct:.0%}",
+        },
     }
 
 
@@ -71,18 +81,29 @@ def check_scoring(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     if low_count > total * 0.3:
         warnings.append(f"低分率偏高({low_count}/{total})")
 
+    # 高分/低分/鸡汤视频标题采样
+    top3 = sorted(candidates, key=lambda x: x.get("score_l3", 0), reverse=True)[:3]
+    bottom3 = sorted(candidates, key=lambda x: x.get("score_l3", 0))[:3]
+    soup_list = [f"{c.get('title','')[:30]}({c.get('soup_score',0):.1f})" for c in candidates if c.get('soup_score', 0) > 0.6]
+
     return {
         "ok": len(warnings) == 0,
         "stage": "打分后",
         "warning": "; ".join(warnings) if warnings else "",
         "summary": (
-            f"幸存{total}条。均分{avg_score:.2f}，最高{max(scores):.2f}，最低{min(scores):.2f}。"
+            f"幸存{total}条。均分{avg_score:.2f}。"
             f"鸡汤{soup_count}条，低分{low_count}条。"
         ),
         "details": {
-            "total": total, "avg_score": round(avg_score, 3),
-            "max_score": round(max(scores), 3), "min_score": round(min(scores), 3),
-            "soup_count": soup_count, "low_count": low_count,
+            "total": total,
+            "avg_score": round(avg_score, 3),
+            "max_score": round(max(scores), 3),
+            "min_score": round(min(scores), 3),
+            "soup_count": soup_count,
+            "low_count": low_count,
+            "top3": [f"{c.get('title','')[:35]}({c.get('score_l3',0):.2f})" for c in top3],
+            "bottom3": [f"{c.get('title','')[:35]}({c.get('score_l3',0):.2f})" for c in bottom3],
+            "soup_list": soup_list[:5],
         },
     }
 

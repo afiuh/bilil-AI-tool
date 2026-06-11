@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any
+from bili_tool._cp_pause import checkpoint_pause
 from bili_tool._review import run_review
 
 logger = logging.getLogger(__name__)
@@ -53,9 +54,7 @@ def run_daily(
     # [检查点1] 话题分布
     from bili_tool.checkpoint import check_discovery
     cp1 = check_discovery(candidates)
-    logger.info(f"[检查点1] {cp1['summary']}")
-    if cp1.get('warning'):
-        logger.warning(f"[检查点1] ⚠️ {cp1['warning']}")
+    checkpoint_pause(1, cp1)
 
     # ② 打分
     if latest and latest >= "02_l1":
@@ -82,9 +81,7 @@ def run_daily(
     # [检查点2] 打分分布
     from bili_tool.checkpoint import check_scoring
     cp2 = check_scoring(candidates)
-    logger.info(f"[检查点2] {cp2['summary']}")
-    if cp2.get('warning'):
-        logger.warning(f"[检查点2] ⚠️ {cp2['warning']}")
+    checkpoint_pause(2, cp2)
 
     # ③ 策展
     candidates = curate(candidates, db, limit=limit)
@@ -108,9 +105,7 @@ def run_daily(
     # [检查点3] 笔记质量
     from bili_tool.checkpoint import check_output
     cp3 = check_output(note_path)
-    logger.info(f"[检查点3] {cp3['summary']}")
-    if cp3.get('warning'):
-        logger.warning(f"[检查点3] ⚠️ {cp3['warning']}")
+    checkpoint_pause(3, cp3)
 
     # 清理缓存
     cleanup(run_id)
