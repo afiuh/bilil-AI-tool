@@ -44,7 +44,7 @@ def count_reviewed(note_path: str) -> tuple[int, int]:
     """统计已阅状态。(总数, 已阅数)。"""
     content = Path(note_path).read_text(encoding="utf-8")
     total = content.count("✅ 已阅")
-    checked = len(re.findall(r'- \[[xX]\] 已阅', content))
+    checked = len(re.findall(r'✅ 已阅\s*\n- \[[xX]\]', content))
     return total, checked
 
 
