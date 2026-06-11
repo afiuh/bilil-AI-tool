@@ -30,8 +30,14 @@ class PoolRunner:
     def run(self):
         from bili_tool.config import get_config
         self._cfg = get_config()
+        # 种子注入（首轮）
+        extra = self._inject_seeds()
+
         while self._retries_left >= 0:
             c = self._search()
+            if extra:
+                c = extra + c
+                extra = []  # 只在首轮注入
             if not c:
                 self._retries_left -= 1
                 self._rotate_strategy()
@@ -46,6 +52,52 @@ class PoolRunner:
             self._rotate_strategy()
         return self._select_top(c)
 
+    def _inject_seeds(self, max_new=10):
+        """用种子数据发现新内容：UP主蔓延 + 关联推荐。"""
+        extra = []
+        # UP主蔓延：爬关注UP主的关注链，发现新UP主，拉他们视频
+        if self.seed_mids:
+            try:
+                from bili_tool.discovery import _spread_up_chain
+                from bili_tool.bili_api import get_upper_videos
+                new_mids = _spread_up_chain(self.taste, self.seed_mids[:20], depth=1)
+                for mid in new_mids[:max_new]:
+                    if mid not in self.taste.followed_mids:
+                        videos = get_upper_videos(mid, page=1, page_size=3)
+                        for v in videos:
+                            bvid = v.get("bvid", "")
+                            if bvid and bvid not in self._seen_bvids:
+                                self._seen_bvids.add(bvid)
+                                v["_pool_id"] = self.pool_id
+                                v["_source"] = "spread"
+                                extra.append(v)
+            except Exception as e:
+                logger.debug("[%s] UP蔓延失败: %s", self.pool_id, e)
+
+        # 关联推荐：基于收藏夹BV号找相关视频
+        if self.seed_bvids:
+            try:
+                from bili_tool.bili_api import get_related_videos
+                import random as _rnd
+                sample = _rnd.sample(self.seed_bvids, min(3, len(self.seed_bvids)))
+                for bvid in sample:
+                    related = get_related_videos(bvid, limit=5)
+                    for v in related:
+                        vbvid = v.get("bvid", "")
+                        if vbvid and vbvid not in self._seen_bvids:
+                            self._seen_bvids.add(vbvid)
+                            v["_pool_id"] = self.pool_id
+                            v["_source"] = "related"
+                            extra.append(v)
+            except Exception as e:
+                logger.debug("[%s] 关联推荐失败: %s", self.pool_id, e)
+
+        logger.info("[%s] 种子注入: +%d条 (蔓延%d+关联%d)",
+                     self.pool_id, len(extra),
+                     sum(1 for v in extra if v.get("_source")=="spread"),
+                     sum(1 for v in extra if v.get("_source")=="related"))
+        return extra
+
     def _search(self):
         from bili_tool.bili_api import search_videos
         sort = SEARCH_SORTS[self._sort_idx % len(SEARCH_SORTS)]
@@ -53,11 +105,7 @@ class PoolRunner:
         import random as _random
         time.sleep(_random.uniform(0.5, 2.0))  # [IO] 防止5池并发触发B站风控
         try:
-            # 注入种子数据提升搜索质量
-            kwargs = {'page': self._page, 'page_size': 15}
-            if self.seed_mids and self._page == 1:
-                kwargs['up_mid'] = self.seed_mids[0]
-            results = search_videos(kw, **kwargs)
+            results = search_videos(kw, page=self._page, page_size=15)
         except Exception as e:
             logger.warning("[%s] search: %s", self.pool_id, e)
             return []
