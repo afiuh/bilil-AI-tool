@@ -130,16 +130,7 @@ def score_l2(candidates: list[dict[str, Any]], taste: TasteProfile) -> list[dict
             logger.info(f"跳过 {bvid}: 字幕仅{len(subtitle)}字，疑似非中文内容")
             continue
         if not subtitle:
-            # 无字幕 → L1分作为基础，标题分析加分（FunASR 太慢，跳过）
-            # 无字幕 → L1分作为基础，标题分析加分
-            base = c.get("score_l1", 0.3)
-            title = c.get("title", "")
-            # 标题深度信号额外加分
-            depth_bonus = 0
-            deep_words = ["深度", "解读", "底层逻辑", "拆解", "密码", "分析", "系统", "万字"]
-            depth_bonus = sum(0.03 for w in deep_words if w in title)
-            c["score_l2"] = round(min(base * 0.85 + depth_bonus, 1.0), 3)
-            survivors.append(c)
+            # 无字幕 → 直接毙掉
             continue
 
         # 采样：前 1000 字 + 中间 1000 字
@@ -473,12 +464,8 @@ def score_l2_gpu(candidates, taste):
                 c["score_l2"] = round(score, 3)
                 survivors.append(c)
             continue
-        # 无字幕 → 降分
-        base = c.get("score_l1", 0.3)
-        title = c.get("title", "")
-        depth_bonus = sum(0.03 for w in ["深度","解读","底层逻辑","拆解","分析"] if w in title)
-        c["score_l2"] = round(min(base * 0.85 + depth_bonus, 1.0), 3)
-        survivors.append(c)
+        # 无字幕 → 直接毙掉
+        continue
 
     survivors.sort(key=lambda x: x.get("score_l2", 0), reverse=True)
     logger.info(f"L2(GPU): {len(candidates)} → {len(survivors)}")
