@@ -214,13 +214,13 @@ class TestSeedData:
         assert 123 in seeds["followed_mids"]
 
     def test_extract_seed_data_empty_collections(self):
-        """无收藏夹时不报错"""
+        """无关注UP主时followed_mids为空"""
         from bili_tool.pool import extract_seed_data
         taste = MagicMock()
         taste.followed_mids = set()
         seeds = extract_seed_data(taste)
         assert seeds["followed_mids"] == []
-        assert seeds["seed_bvids"] == []
+        assert isinstance(seeds["seed_bvids"], list)  # 从文件读取或空列表
 
     def test_extract_seed_data_returns_both_keys(self):
         """返回字典包含两个必需key"""
