@@ -46,9 +46,11 @@ def scan_feedback_notes(note_dir: Path, date_str: str) -> dict[str, Any]:
         if not bvid:
             continue
 
-        # 检查已阅
+        # 检查已阅 + 已交流（两者都勾了才处理反馈）
         if not _is_reviewed(sec):
             continue
+        if not _is_communicated(sec):
+            continue  # 未交流的不调整权重
 
         # ① 解析 💬 你的看法（逐段批注反馈）
         annotation_feedbacks = _parse_annotations(sec)
@@ -103,6 +105,12 @@ def _extract_bvid(section: str) -> str:
 
 def _is_reviewed(section: str) -> bool:
     m = re.search(r"✅ 已阅.*\n- \[([ xX])\s*\]", section)
+    return bool(m and m.group(1).strip().lower() == "x")
+
+
+def _is_communicated(section: str) -> bool:
+    """检查是否已交流（用户手动勾选或AI交流后勾选）。"""
+    m = re.search(r"✅ 已交流.*- \[([ xX])\s*\]", section, re.DOTALL)
     return bool(m and m.group(1).strip().lower() == "x")
 
 
