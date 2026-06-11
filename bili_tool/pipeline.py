@@ -25,13 +25,20 @@ def run_daily(
 
     logger.info("=== 管道启动 ===")
 
-    # 发现
+    # ① 发现
     candidates = discover_all(taste)
     if not candidates:
         logger.warning("发现阶段无结果")
         return None
 
-    # 打分
+    # [检查点1] 话题分布
+    from bili_tool.checkpoint import check_discovery
+    cp1 = check_discovery(candidates)
+    logger.info(f"[检查点1] {cp1['summary']}")
+    if cp1.get('warning'):
+        logger.warning(f"[检查点1] ⚠️ {cp1['warning']}")
+
+    # ② 打分
     candidates = score_l1(candidates, taste)
     candidates = score_l2(candidates, taste)
     candidates = score_l3(candidates, taste)
@@ -39,7 +46,14 @@ def run_daily(
         logger.warning("打分后无幸存者")
         return None
 
-    # 策展
+    # [检查点2] 打分分布
+    from bili_tool.checkpoint import check_scoring
+    cp2 = check_scoring(candidates)
+    logger.info(f"[检查点2] {cp2['summary']}")
+    if cp2.get('warning'):
+        logger.warning(f"[检查点2] ⚠️ {cp2['warning']}")
+
+    # ③ 策展
     candidates = curate(candidates, db, limit=limit)
 
     # 写入笔记（分析字段暂为空，后续精校填充）
@@ -56,6 +70,13 @@ def run_daily(
         logger.info(f"精校完成: {updated} 条")
     else:
         logger.warning("未设置 DEEPSEEK_API_KEY，跳过精校")
+
+    # [检查点3] 笔记质量
+    from bili_tool.checkpoint import check_output
+    cp3 = check_output(note_path)
+    logger.info(f"[检查点3] {cp3['summary']}")
+    if cp3.get('warning'):
+        logger.warning(f"[检查点3] ⚠️ {cp3['warning']}")
 
     logger.info(f"✅ 管道完成: {note_path}")
     return note_path
