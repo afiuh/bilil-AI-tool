@@ -270,13 +270,8 @@ def is_partition_blacklisted(partition_id: int) -> bool:
 def extract_seed_data(taste) -> dict:
     """从用户画像提取种子数据。返回 {followed_mids: [int], seed_bvids: [str]}。"""
     mids = list(taste.followed_mids) if hasattr(taste, 'followed_mids') and taste.followed_mids else []
-    bvids = []
-    try:
-        from bili_tool.storage import Database
-        db = Database()
-        bvids = db.get_recent_bvids(days=90)
-    except Exception:
-        pass
+    # 收藏夹 BV 号（B站 API 暂不可用，留空待后续修复）
+    bvids = []  # TODO: 接入 B站收藏夹 API
     return {"followed_mids": mids, "seed_bvids": bvids}
 
 
