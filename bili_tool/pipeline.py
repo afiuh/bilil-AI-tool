@@ -21,11 +21,11 @@ def run_daily(
     from bili_tool.curator import curate
     from bili_tool.analyzer import post_analyze_note
     from bili_tool.notes import write_recommendations
-    from datetime import date
+    from datetime import date, datetime
 
-    from datetime import date
+    from datetime import date, datetime
     from bili_tool.cache import save, load, get_latest_stage, cleanup
-    run_id = date.today().strftime("%Y-%m-%d")
+    run_id = datetime.now().strftime("%Y-%m-%d-%H")
     latest = get_latest_stage(run_id)
 
     # 连通性检查
@@ -90,7 +90,7 @@ def run_daily(
     save("05_curated", candidates, run_id)
 
     # 写入笔记（分析字段暂为空，后续精校填充）
-    today = date.today().strftime("%Y-%m-%d")
+    today = datetime.now().strftime("%Y-%m-%d-%H")
     note_path = write_recommendations(candidates, taste, today, note_dir)
 
     # 记录推荐历史
