@@ -382,11 +382,11 @@ def cmd_daily() -> None:
     # ③ 运行管道
     logger.info("③ 运行推荐管道...")
     import os
-    from bili_tool.pipeline import run_daily
+    from bili_tool.pipeline import run_daily_5pool as run_daily_5pool
     db = Database()
     taste = TasteProfile.from_dict(db.load_taste() or {})
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-    note_path = run_daily(taste, db, api_key, cfg.note_dir, limit=cfg.daily_count)
+    note_path = run_daily_5pool(taste, db, api_key, cfg.note_dir, limit=cfg.daily_count)
     if note_path:
         logger.info(f"✅ 管道完成！笔记: {note_path}")
     else:

@@ -35,11 +35,11 @@ def run_daily(
         logger.error("B站 API 连通性检查失败，SESSDATA 可能已过期")
         return None
 
+    from bili_tool.bootstrap import ensure_fresh
+    ensure_fresh()
+
     if latest:
         logger.info(f"=== 管道恢复（从缓存 {latest}） ===")
-    else:
-        from bili_tool.bootstrap import ensure_fresh
-    ensure_fresh()
     logger.info("=== 管道启动 ===")
 
     # ① 发现
@@ -247,7 +247,19 @@ def run_daily_5pool(
         runner.seed_bvids = seeds["seed_bvids"]
         pools.append(runner)
 
-    # ③ 并行跑搜索+打分（线程池）
+    # ③ 启动GPU消费者线程（和池并行跑）
+    import threading
+    gpu_done = threading.Event()
+    def gpu_worker():
+        while not gpu_done.is_set():
+            from bili_tool.pool import get_gpu_queue_size
+            if get_gpu_queue_size() > 0:
+                process_gpu_queue()
+            gpu_done.wait(1.0)  # 每秒检查一次
+    gpu_thread = threading.Thread(target=gpu_worker, daemon=True)
+    gpu_thread.start()
+
+    # ④ 并行跑搜索+打分（线程池）
     pool_results = {}
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(p.run): p for p in pools}
@@ -261,12 +273,14 @@ def run_daily_5pool(
                 logger.error("[%s] 失败: %s", p.pool_id, e)
                 pool_results[p.pool_id] = []
 
-    # ④ 处理GPU队列
-    gpu_count = process_gpu_queue()
-    logger.info("GPU转录完成: %d 条", gpu_count)
+    # ⑤ 停止GPU消费者 + 清空剩余队列
+    gpu_done.set()
+    gpu_thread.join(timeout=5)
+    remaining = process_gpu_queue()
+    logger.info("GPU转录完成: %d 条", remaining)
     clear_pool_results()
 
-    # ⑤ 合并+排序（先合并才能检查）
+    # ⑥ 合并+排序（先合并才能检查）
     from bili_tool.pool import merge_pool_results
     all_candidates = merge_pool_results(pool_results)
 
