@@ -25,6 +25,7 @@ from bili_tool.feedback import parse_feedback_sentiment, scan_feedback_notes
 from bili_tool.scoring import score_l1, score_l2, score_l3, score_l2_auto
 from bili_tool.storage import Database
 from bili_tool.taste import TasteProfile
+from bili_tool._review_cli import cmd_review
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)

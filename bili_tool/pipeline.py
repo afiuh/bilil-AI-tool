@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any
+from bili_tool._review import run_review
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +171,9 @@ def get_status(db, note_dir: Path) -> dict[str, Any]:
 
 
 def get_latest_note(note_dir: Path) -> Path | None:
+    from bili_tool.notes import get_latest_note as _get
+    return _get(note_dir)
+
     from bili_tool.notes import get_latest_note as _get
     return _get(note_dir)
 
