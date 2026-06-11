@@ -26,6 +26,8 @@ class PoolRunner:
         self._seen_bvids = set()
         self._sort_idx = 0
         self._page = 1
+        self.seed_mids: list = []
+        self.seed_bvids: list = []
 
     def run(self):
         from bili_tool.config import get_config
