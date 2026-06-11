@@ -199,3 +199,98 @@ def _check_connectivity() -> bool:
     except Exception as e:
         logger.error(f"连通性检查失败: {e}")
         return False
+
+# ═══════════════════════════════════════════
+# 5池并行管道（v0.4.0）
+# ═══════════════════════════════════════════
+
+def run_daily_5pool(
+    taste, db, api_key, note_dir, limit=10
+):
+    """5池并行管道。5个分区各跑一个池，合并输出。"""
+    from datetime import datetime
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from bili_tool.pool import (
+        PoolRunner, PARTITION_WHITELIST, PARTITION_KEYWORDS,
+        process_gpu_queue, clear_pool_results,
+    )
+    from bili_tool.notes import write_recommendations
+    from bili_tool.curator import rank
+
+    logger.info("=== 5池管道启动 ===")
+
+    # ① 随机选5个分区
+    import random
+    selected = random.sample(PARTITION_WHITELIST, min(5, len(PARTITION_WHITELIST)))
+    logger.info("选中分区: %s", selected)
+
+    # ② 建5个池
+    pools = []
+    for i, pid in enumerate(selected):
+        kw = PARTITION_KEYWORDS.get(pid, ["深度", "解读"])
+        runner = PoolRunner(
+            pool_id=f"pool{i+1}",
+            partition_id=pid,
+            keywords=kw,
+            taste=taste,
+            max_retries=2,
+        )
+        pools.append(runner)
+
+    # ③ 并行跑搜索+打分（线程池）
+    pool_results = {}
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(p.run): p for p in pools}
+        for future in as_completed(futures):
+            p = futures[future]
+            try:
+                result = future.result()
+                pool_results[p.pool_id] = result
+                logger.info("[%s] 产出 %d 条", p.pool_id, len(result))
+            except Exception as e:
+                logger.error("[%s] 失败: %s", p.pool_id, e)
+                pool_results[p.pool_id] = []
+
+    # ④ 处理GPU队列
+    gpu_count = process_gpu_queue()
+    logger.info("GPU转录完成: %d 条", gpu_count)
+    clear_pool_results()
+
+    # ⑤ 合并+排序
+    all_candidates = []
+    for pid, results in pool_results.items():
+        all_candidates.extend(results)
+
+    if not all_candidates:
+        logger.warning("5池全部空产")
+        return None
+
+    ranked = rank(all_candidates, sort_by="score_l3")
+    final = ranked[:limit]
+
+    # ⑥ 写笔记+精校
+    from datetime import date
+    today = datetime.now().strftime("%Y-%m-%d-%H")
+    note_path = write_recommendations(final, taste, today, note_dir)
+
+    for c in final:
+        db.mark_recommended(c["bvid"], note_path)
+
+    if api_key:
+        from bili_tool.analyzer import post_analyze_note
+        updated = post_analyze_note(note_path, api_key)
+        logger.info("精校: %d 条", updated)
+
+    # 检查点
+    from bili_tool.checkpoint import check_output
+    from bili_tool._cp_pause import checkpoint_pause
+    cp = check_output(note_path)
+    checkpoint_pause(3, cp)
+
+    topic_dist = {}
+    for c in final:
+        p = c.get("partition", "其他")
+        topic_dist[p] = topic_dist.get(p, 0) + 1
+    logger.info("产出: %d条, 分区: %s", len(final), topic_dist)
+    logger.info("管道完成: %s", note_path)
+    return note_path
