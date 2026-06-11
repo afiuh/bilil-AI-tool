@@ -76,6 +76,8 @@ class Config:
     # ── 探索池 ──
     explore_ratio: float = 0.3         # 探索池占比（0=纯兴趣，1=纯探索）
 
+    # ── 占位符（notes.py 和 analyzer.py 共用）────
+    placeholder_analysis: str = "⏳ 待精校"
     def __post_init__(self) -> None:
         # [C6] 关键配置缺失直接报错
         if not self.sessdata:

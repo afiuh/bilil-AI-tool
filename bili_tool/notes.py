@@ -114,7 +114,7 @@ def _build_note_content(
             analysis_text or "（待分析）",
             "",
             "### 📖 精校文本与批注",
-            analysis_text if analysis_text else "> ⏳ 待精校...",
+            analysis_text if analysis_text else ph,
             "",
             "### 🎯 推荐理由",
             reason or "基于口味画像综合匹配",
