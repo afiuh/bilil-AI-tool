@@ -250,3 +250,44 @@ class TestPartitionBlacklist:
         """黑名单不为空"""
         from bili_tool.pool import PARTITION_BLACKLIST
         assert len(PARTITION_BLACKLIST) > 0
+
+
+class TestMergeResults:
+    """合并池结果测试"""
+
+    def test_merge_sorts_by_score(self):
+        """合并后按score_l3降序"""
+        from bili_tool.pool import merge_pool_results
+        pool_results = {
+            "pool1": [{"bvid": "BV1", "score_l3": 0.3}],
+            "pool2": [{"bvid": "BV2", "score_l3": 0.8}],
+            "pool3": [{"bvid": "BV3", "score_l3": 0.5}],
+        }
+        merged = merge_pool_results(pool_results)
+        assert merged[0]["score_l3"] == 0.8
+        assert merged[2]["score_l3"] == 0.3
+
+    def test_merge_handles_empty_pool(self):
+        """某池空产不影响合并"""
+        from bili_tool.pool import merge_pool_results
+        pool_results = {
+            "pool1": [{"bvid": "BV1", "score_l3": 0.5}],
+            "pool2": [],
+        }
+        merged = merge_pool_results(pool_results)
+        assert len(merged) == 1
+
+    def test_merge_all_empty_returns_empty(self):
+        """全空返回空列表"""
+        from bili_tool.pool import merge_pool_results
+        assert merge_pool_results({"p1": [], "p2": []}) == []
+
+    def test_merge_preserves_all_bvids(self):
+        """不丢数据"""
+        from bili_tool.pool import merge_pool_results
+        pool_results = {
+            "p1": [{"bvid": f"BV{i}", "score_l3": 0.5} for i in range(3)],
+            "p2": [{"bvid": f"BV{i+10}", "score_l3": 0.5} for i in range(2)],
+        }
+        merged = merge_pool_results(pool_results)
+        assert len(merged) == 5

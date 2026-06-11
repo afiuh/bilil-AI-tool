@@ -219,3 +219,11 @@ def extract_seed_data(taste) -> dict:
     except Exception:
         pass
     return {"followed_mids": mids, "seed_bvids": bvids}
+
+
+def merge_pool_results(pool_results: dict) -> list:
+    """纯函数：合并多池结果，按score_l3降序排列。"""
+    all_candidates = []
+    for results in pool_results.values():
+        all_candidates.extend(results)
+    return sorted(all_candidates, key=lambda c: c.get("score_l3", 0), reverse=True)

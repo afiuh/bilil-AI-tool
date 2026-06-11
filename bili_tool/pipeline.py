@@ -257,15 +257,14 @@ def run_daily_5pool(
     clear_pool_results()
 
     # ⑤ 合并+排序
-    all_candidates = []
-    for pid, results in pool_results.items():
-        all_candidates.extend(results)
+    from bili_tool.pool import merge_pool_results
+    all_candidates = merge_pool_results(pool_results)
 
     if not all_candidates:
         logger.warning("5池全部空产")
         return None
 
-    ranked = rank(all_candidates, sort_by="score_l3")
+    ranked = all_candidates  # merge_pool_results 已排序
     final = ranked[:limit]
 
     # ⑥ 写笔记+精校
