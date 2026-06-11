@@ -137,8 +137,10 @@ class PoolRunner:
         for c in candidates:
             self._defer_transcription(c)
         self._collect_transcriptions(candidates)
+        # [IO] 字幕缓存：保存到候选dict供后续使用
+        for c in candidates:
+            c['_cached_subtitle'] = c.get('subtitle_text', '')
         # GPU失败的无字幕视频在_collect_transcriptions中已置为空字符串
-        # scoring.py 的 score_l2 遇到空字符串会降分处理
         return score_l2(candidates, self.taste)
 
     def _defer_transcription(self, candidate):
