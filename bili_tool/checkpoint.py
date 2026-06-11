@@ -144,3 +144,38 @@ def check_output(note_path: str) -> dict[str, Any]:
             "placeholder_count": placeholder, "truncated": truncated,
         },
     }
+
+
+def check_pool_merge(results: dict, taste=None) -> dict:
+    """检查点②(5池模式)：各池合并后 — 总量+分布。"""
+    total = sum(len(v) for v in results.values())
+    if total == 0:
+        return {"ok": False, "stage": "池合并后", "warning": "5池全部空产",
+                "summary": "0条候选", "details": {}}
+
+    # 分区分布
+    from collections import Counter
+    partitions = Counter()
+    for pool_results in results.values():
+        for c in pool_results:
+            partitions[c.get("partition", "未知")] += 1
+
+    # 话题偏斜检查
+    top_topic = partitions.most_common(1)[0] if partitions else ("未知", 0)
+    max_pct = top_topic[1] / total if total > 0 else 0
+
+    from bili_tool.config import get_config
+    cfg = get_config()
+    ok = max_pct < cfg.topic_diversity_warn
+
+    return {
+        "ok": ok,
+        "stage": "池合并后",
+        "warning": f"话题偏斜：{top_topic[0]}占{max_pct:.0%}" if not ok else "",
+        "summary": f"5池合并{total}条。{dict(partitions.most_common(5))}",
+        "details": {
+            "total": total,
+            "pool_counts": {k: len(v) for k, v in results.items()},
+            "partition_dist": dict(partitions.most_common(5)),
+        },
+    }

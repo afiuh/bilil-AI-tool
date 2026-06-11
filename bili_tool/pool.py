@@ -141,6 +141,9 @@ class PoolRunner:
 def process_gpu_queue(device="cuda:0"):
     processed = 0
     while not _gpu_queue.empty():
+        if not vram_safe_to_transcribe():
+            time.sleep(1.0)
+            continue
         try:
             task = _gpu_queue.get(timeout=1)
         except queue.Empty:
@@ -227,3 +230,19 @@ def merge_pool_results(pool_results: dict) -> list:
     for results in pool_results.values():
         all_candidates.extend(results)
     return sorted(all_candidates, key=lambda c: c.get("score_l3", 0), reverse=True)
+
+
+def vram_safe_to_transcribe(threshold: float = 0.85, vram_fn=None) -> bool:
+    """检查VRAM是否安全可转录。vram_fn用于测试注入。"""
+    if vram_fn is None:
+        try:
+            from bili_tool.gpu_monitor import get_vram_info
+            vram_fn = get_vram_info
+        except Exception:
+            return True  # 无法查询时默认允许
+    try:
+        info = vram_fn()
+        used_ratio = info["used"] / info["total"]
+        return used_ratio < threshold
+    except Exception:
+        return True  # 查询失败不阻塞

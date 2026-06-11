@@ -291,3 +291,43 @@ class TestMergeResults:
         }
         merged = merge_pool_results(pool_results)
         assert len(merged) == 5
+
+
+class TestVramGuard:
+    """VRAM守卫测试"""
+
+    def test_vram_safe_returns_true_when_below_threshold(self):
+        """显存低于阈值时应允许转录"""
+        from bili_tool.pool import vram_safe_to_transcribe
+
+        def mock_vram():
+            return {"total": 6144, "used": 3000, "free": 3144}
+
+        assert vram_safe_to_transcribe(threshold=0.85, vram_fn=mock_vram)
+
+    def test_vram_safe_returns_false_when_above_threshold(self):
+        """显存高于阈值时应阻止"""
+        from bili_tool.pool import vram_safe_to_transcribe
+
+        def mock_vram():
+            return {"total": 6144, "used": 5500, "free": 644}
+
+        assert not vram_safe_to_transcribe(threshold=0.85, vram_fn=mock_vram)
+
+    def test_vram_default_threshold(self):
+        """默认阈值0.85"""
+        from bili_tool.pool import vram_safe_to_transcribe
+
+        def mock_vram():
+            return {"total": 6144, "used": 5200, "free": 944}  # 84.6%
+
+        assert vram_safe_to_transcribe(vram_fn=mock_vram)
+
+    def test_vram_fn_unavailable_returns_true(self):
+        """VRAM查询失败时默认允许（不阻塞管道）"""
+        from bili_tool.pool import vram_safe_to_transcribe
+
+        def mock_vram():
+            raise RuntimeError("nvidia-smi not found")
+
+        assert vram_safe_to_transcribe(vram_fn=mock_vram)
