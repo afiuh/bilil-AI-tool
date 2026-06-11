@@ -159,6 +159,7 @@ def score_l2(candidates: list[dict[str, Any]], taste: TasteProfile) -> list[dict
 # ── 鸡汤指数检测 ──────────────────────────
 
 def score_chicken_soup(text: str, taste=None) -> float:
+    cfg = get_config()
     """检测学术外衣下的鸡汤/情绪按摩内容。阈值触发制，不越线不计分。"""
     text_len = max(len(text), 1)
     paragraphs = [p for p in text.split(chr(10)) if len(p.strip()) > 10]
@@ -291,9 +292,10 @@ def _calc_l2_score(text: str, taste=None) -> float:
         score -= penalty
 
     # 鸡汤指数检测（阈值触发制）
+    cfg = get_config()
     soup = score_chicken_soup(text, taste)
-    if soup > 0.6:
-        soup_penalty = 0.15 + (soup - 0.6) * 0.25
+    if soup > cfg.soup_threshold:
+        soup_penalty = cfg.soup_penalty_base + (soup - cfg.soup_threshold) * cfg.soup_penalty_max
         score -= soup_penalty
         logger.debug(f"鸡汤指数={soup:.2f}，扣分={soup_penalty:.2f}")
 

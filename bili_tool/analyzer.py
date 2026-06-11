@@ -223,7 +223,7 @@ def post_analyze_note(note_path: str, api_key: str) -> int:
         logger.info(f"正在分析: {title[:40]} ({len(subtitle)} 字)")
 
         # [IO] 调 LLM
-        if len(subtitle) > 6000:
+        if len(subtitle) > get_config().split_subtitle_chars:
             logger.info(f"视频「{title}」字幕{len(subtitle)}字，使用分段精校")
             analysis = analyze_subtitle_split(subtitle, api_key, title)
         else:
@@ -264,7 +264,7 @@ def analyze_batch(
             c["analysis"] = "（无字幕或字幕过短）"
             continue
         try:
-            if len(subtitle) > 6000:
+            if len(subtitle) > get_config().split_subtitle_chars:
                 c["analysis"] = analyze_subtitle_split(subtitle, api_key, title)
             else:
                 c["analysis"] = analyze_subtitle(subtitle, api_key, title)

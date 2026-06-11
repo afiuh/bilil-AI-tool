@@ -28,6 +28,11 @@ def run_daily(
     run_id = date.today().strftime("%Y-%m-%d")
     latest = get_latest_stage(run_id)
 
+    # 连通性检查
+    if not _check_connectivity():
+        logger.error("B站 API 连通性检查失败，SESSDATA 可能已过期")
+        return None
+
     if latest:
         logger.info(f"=== 管道恢复（从缓存 {latest}） ===")
     else:
@@ -167,3 +172,31 @@ def get_status(db, note_dir: Path) -> dict[str, Any]:
 def get_latest_note(note_dir: Path) -> Path | None:
     from bili_tool.notes import get_latest_note as _get
     return _get(note_dir)
+
+
+def _check_connectivity() -> bool:
+    """检查 B站 API 连通性，验证 SESSDATA 是否有效。"""
+    import requests
+    from bili_tool.config import get_config
+    cfg = get_config()
+    try:
+        resp = requests.get(
+            "https://api.bilibili.com/x/web-interface/nav",
+            headers=cfg.headers,
+            cookies=cfg.cookie_dict,
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("code") == 0:
+                uname = data.get("data", {}).get("uname", "?")
+                logger.info(f"B站连通性OK，当前用户: {uname}")
+                return True
+            elif data.get("code") == -101:
+                logger.error("SESSDATA 已过期（code=-101），请更新 .env 中的 BILI_SESSDATA")
+                return False
+        logger.warning(f"连通性检查异常: HTTP {resp.status_code}")
+        return False
+    except Exception as e:
+        logger.error(f"连通性检查失败: {e}")
+        return False

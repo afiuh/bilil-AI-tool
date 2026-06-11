@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from bili_tool.config import get_config
 from bili_tool.storage import Database
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ def curate(
     unique.sort(key=lambda x: x.get("score_l3", 0), reverse=True)
 
     # 多样性约束：确保每个核心方向至少有 floor 条
-    DIVERSITY_FLOOR = 1   # 每个方向最少条数
+    DIVERSITY_FLOOR = get_config().diversity_floor   # 每个方向最少条数
     topic_categories = {
         "历史": ["人文历史", "历史"],
         "哲学/社科": ["社科·法律·心理", "哲学"],
