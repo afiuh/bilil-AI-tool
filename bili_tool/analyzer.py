@@ -14,6 +14,8 @@ from typing import Any
 
 import requests
 
+from bili_tool.config import get_config
+
 logger = logging.getLogger(__name__)
 
 # [IO] DeepSeek API 配置

@@ -371,7 +371,7 @@ def cmd_daily() -> None:
         latest = open(notes[-1], encoding="utf-8").read()
         total = latest.count("✅ 已阅")
         # 只统计已阅复选框，排除已交流复选框的干扰
-        checked = len(re.findall(r'- \[[xX]\] 已阅', latest))
+        checked = len(re.findall(r'✅ 已阅\s*\n- \[[xX]\]', latest))
         if total > 0 and checked < total:
             logger.info(f"② 最新笔记 {checked}/{total} 已阅 → 跳过")
             return

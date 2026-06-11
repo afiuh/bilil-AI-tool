@@ -19,7 +19,7 @@ def run_daily(
 ) -> str | None:
     """完整每日管道。返回笔记路径，无法生成返回None。"""
     from bili_tool.discovery import discover_all
-    from bili_tool.scoring import score_l1, score_l2, score_l3
+    from bili_tool.scoring import score_l1, score_l2_auto, score_l3
     from bili_tool.curator import curate
     from bili_tool.analyzer import post_analyze_note
     from bili_tool.notes import write_recommendations
@@ -64,9 +64,9 @@ def run_daily(
         save("02_l1", candidates, run_id)
 
     if latest and latest >= "03_l2":
-        candidates = load("03_l2", run_id) or score_l2(candidates, taste)
+        candidates = load("03_l2", run_id) or score_l2_auto(candidates, taste)
     else:
-        candidates = score_l2(candidates, taste)
+        candidates = score_l2_auto(candidates, taste)
         save("03_l2", candidates, run_id)
     if latest and latest >= "04_l3":
         candidates = load("04_l3", run_id) or score_l3(candidates, taste)
@@ -126,13 +126,13 @@ def run_scoring_only(
     levels: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """只跑打分阶段。levels=None时跑全部三级。"""
-    from bili_tool.scoring import score_l1, score_l2, score_l3
+    from bili_tool.scoring import score_l1, score_l2_auto, score_l3
     levels = levels or ["l1", "l2", "l3"]
     for lvl in levels:
         if lvl == "l1":
             candidates = score_l1(candidates, taste)
         elif lvl == "l2":
-            candidates = score_l2(candidates, taste)
+            candidates = score_l2_auto(candidates, taste)
         elif lvl == "l3":
             candidates = score_l3(candidates, taste)
     return candidates

@@ -155,8 +155,13 @@ def _gen_partition_keywords(taste: TasteProfile) -> list[str]:
 
 
 def discover_all(taste: TasteProfile) -> list[dict[str, Any]]:
-    """四策略并行发现，去重合并。别名，等同于discover()。"""
-    return discover(taste)
+    """四策略并行发现，去重合并。自动从数据库获取种子数据。"""
+    from bili_tool.storage import Database
+    db = Database()
+    recent = db.get_recent_bvids()
+    seed_mids = list(taste.up_weights.keys())[:10]
+    seed_bvids = [r["bvid"] for r in db.get_pending(limit=20)]
+    return discover(taste, recent, seed_mids, seed_bvids)
 
 
 def discover_by_following(
