@@ -240,3 +240,25 @@ def post_analyze_note(note_path: str, api_key: str) -> int:
     open(note_path, "w", encoding="utf-8").write("".join(new_parts))
     logger.info(f"精校完成: {updated} 条视频")
     return updated
+
+
+def analyze_batch(
+    candidates: list[dict[str, Any]],
+    api_key: str,
+) -> list[dict[str, Any]]:
+    """批量精校。自动判断字幕长短选择单次或分段API调用。"""
+    for c in candidates:
+        subtitle = c.get("subtitle_text", "")
+        title = c.get("title", "")
+        if not subtitle or len(subtitle) < 50:
+            c["analysis"] = "（无字幕或字幕过短）"
+            continue
+        try:
+            if len(subtitle) > 6000:
+                c["analysis"] = analyze_subtitle_split(subtitle, api_key, title)
+            else:
+                c["analysis"] = analyze_subtitle(subtitle, api_key, title)
+        except Exception as e:
+            logger.error(f"批量精校失败 [{title}]: {e}")
+            c["analysis"] = f"（分析失败: {e}）"
+    return candidates

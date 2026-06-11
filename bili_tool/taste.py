@@ -146,3 +146,43 @@ class TasteProfile:
     def get_vague_intro_penalty(self) -> bool:
         """是否对模糊开篇降权"""
         return getattr(self, 'vague_intro_penalty', True)
+
+
+# ── Profile-style wrappers ──────────────────
+
+def get_taste(db) -> TasteProfile | None:
+    """从数据库加载用户画像。"""
+    try:
+        data = db.load_taste()
+        return TasteProfile.from_dict(data) if data else TasteProfile()
+    except Exception:
+        return TasteProfile()
+
+
+def update_taste(taste: TasteProfile, changes: dict[str, Any], db) -> TasteProfile:
+    """应用变更并写回数据库。"""
+    for key, val in changes.items():
+        if hasattr(taste, key):
+            setattr(taste, key, val)
+    try:
+        db.save_taste(taste.to_dict())
+    except Exception:
+        pass
+    return taste
+
+
+def get_blacklist(taste: TasteProfile) -> set[int]:
+    """获取黑名单。"""
+    return taste.blacklist if hasattr(taste, 'blacklist') else set()
+
+
+def add_to_blacklist(mid: int, taste: TasteProfile, db) -> TasteProfile:
+    """拉黑UP主。"""
+    if not hasattr(taste, 'blacklist'):
+        taste.blacklist = set()
+    taste.blacklist.add(mid)
+    try:
+        db.save_taste(taste.to_dict())
+    except Exception:
+        pass
+    return taste

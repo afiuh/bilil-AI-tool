@@ -71,3 +71,71 @@ def curate(
 
     logger.info(f"策展: {len(candidates)} → {len(result)} (含多样性约束)")
     return result[:limit]
+
+
+def deduplicate(
+    candidates: list[dict[str, Any]],
+    db,  # Database
+    days: int = 60,
+) -> list[dict[str, Any]]:
+    """去重：排除已推荐和候选内重复。"""
+    from bili_tool.storage import Database as DB
+    recent = set()
+    try:
+        recent = set(db.get_recent_bvids(days=days))
+    except Exception:
+        pass
+    seen: set[str] = set()
+    result = []
+    for c in candidates:
+        bvid = c.get("bvid", "")
+        if bvid in seen or bvid in recent:
+            continue
+        seen.add(bvid)
+        result.append(c)
+    return result
+
+
+def rank(
+    candidates: list[dict[str, Any]],
+    sort_by: str = "score_l3",
+) -> list[dict[str, Any]]:
+    """按指定字段排序。"""
+    return sorted(candidates, key=lambda x: x.get(sort_by, 0), reverse=True)
+
+
+def enforce_diversity(
+    candidates: list[dict[str, Any]],
+    limit: int = 10,
+    floor: int = 1,
+) -> list[dict[str, Any]]:
+    """多样性约束：每个核心方向至少floor条。"""
+    topic_categories = {
+        "历史": ["人文历史", "历史"],
+        "哲学/社科": ["社科·法律·心理", "哲学"],
+        "影视": ["影视杂谈", "电影", "电视剧"],
+    }
+    result = []
+    used: set[str] = set()
+    for topic, partitions in topic_categories.items():
+        count = 0
+        for c in candidates:
+            if c["bvid"] in used:
+                continue
+            partition = c.get("partition", "")
+            title = c.get("title", "")
+            if any(p in partition for p in partitions) or any(
+                kw in title for kw in partitions
+            ):
+                result.append(c)
+                used.add(c["bvid"])
+                count += 1
+                if count >= floor:
+                    break
+    for c in candidates:
+        if len(result) >= limit:
+            break
+        if c["bvid"] not in used:
+            result.append(c)
+            used.add(c["bvid"])
+    return result[:limit]

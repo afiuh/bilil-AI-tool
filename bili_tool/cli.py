@@ -378,42 +378,19 @@ def cmd_daily() -> None:
     else:
         logger.info("② 无历史笔记 → 生成新推荐")
 
-    # ② 发现+打分
-    logger.info("② 运行发现流水线...")
-    results = cmd_discover(limit=cfg.daily_count)
-
-    if not results:
-        logger.warning("未找到足够的推荐视频")
-        return
-
-    # ③ 写入笔记
-    logger.info("③ 写入 Obsidian...")
-    db = Database()
-    profile_data = db.load_taste()
-    taste = TasteProfile.from_dict(profile_data) if profile_data else TasteProfile()
-
-    content = _build_note_content(results, taste, today)
-    note_path = cfg.note_dir / f"推荐-{today}.md"
-    note_path.write_text(content, encoding="utf-8")
-
-    # 记录推荐历史
-    for r in results:
-        db.mark_recommended(r["bvid"], str(note_path))
-
-    db.close()
-    logger.info(f"✅ 管道完成！笔记: {note_path}")
-    logger.info("📝 待 Hermes 精校分析...")
-
-    # [IO] 自动精校分析
-    logger.info("④ LLM 精校分析...")
+    # ③ 运行管道
+    logger.info("③ 运行推荐管道...")
     import os
+    from bili_tool.pipeline import run_daily
+    db = Database()
+    taste = TasteProfile.from_dict(db.load_taste() or {})
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-    if api_key:
-        from bili_tool.analyzer import post_analyze_note
-        updated = post_analyze_note(str(note_path), api_key)
-        logger.info(f"精校完成: {updated} 条")
+    note_path = run_daily(taste, db, api_key, cfg.note_dir, limit=cfg.daily_count)
+    if note_path:
+        logger.info(f"✅ 管道完成！笔记: {note_path}")
     else:
-        logger.warning("未设置 DEEPSEEK_API_KEY，跳过精校分析")
+        logger.warning("管道未产出结果")
+    db.close()
 
 
 def main() -> None:

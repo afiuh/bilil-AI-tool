@@ -137,3 +137,74 @@ def _gen_partition_keywords(taste: TasteProfile) -> list[str]:
     """生成分区探索关键词。"""
     top_topics = sorted(taste.topics.items(), key=lambda x: x[1], reverse=True)[:3]
     return [t[0] for t in top_topics]
+
+
+def discover_all(taste: TasteProfile) -> list[dict[str, Any]]:
+    """四策略并行发现，去重合并。别名，等同于discover()。"""
+    return discover(taste)
+
+
+def discover_by_following(
+    mids: list[int],
+    depth: int = 3,
+    max_results: int = 200,
+) -> list[dict[str, Any]]:
+    """从指定UP主关注链蔓延发现。"""
+    from bili_tool.bili_api import get_following
+    result = []
+    visited: set[int] = set(mids)
+    queue = list(mids)
+    for _ in range(depth):
+        if len(result) >= max_results or not queue:
+            break
+        mid = queue.pop(0)
+        try:
+            following = get_following(mid)
+            for f in following[:20]:
+                fid = f.get("mid", 0)
+                if fid not in visited:
+                    visited.add(fid)
+                    queue.append(fid)
+                    result.append({
+                        "bvid": "",
+                        "title": "",
+                        "up_mid": fid,
+                        "up_name": f.get("name", ""),
+                        "source": "following_chain",
+                    })
+        except Exception:
+            continue
+    return result[:max_results]
+
+
+def discover_by_search(
+    keywords: list[str],
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """按关键词搜索候选视频。"""
+    from bili_tool.bili_api import search_videos
+    result = []
+    for kw in keywords[:5]:
+        try:
+            result.extend(search_videos(kw, limit=limit // len(keywords) + 1))
+        except Exception:
+            continue
+    return result[:limit]
+
+
+def discover_by_partition(
+    partition_ids: list[int] | None = None,
+    sort: str = "hot",
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """扫分区热门视频。默认知识/人文历史分区。"""
+    from bili_tool.bili_api import get_partition_videos
+    if partition_ids is None:
+        partition_ids = [36, 207]  # 知识, 人文历史
+    result = []
+    for pid in partition_ids:
+        try:
+            result.extend(get_partition_videos(pid, sort=sort, limit=limit // len(partition_ids) + 1))
+        except Exception:
+            continue
+    return result[:limit]

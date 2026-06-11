@@ -485,3 +485,28 @@ def _is_gpu_available():
 
 # 导出统一的 score_l2（自动选 GPU/CPU）
 score_l2_auto = score_l2_gpu if _is_gpu_available() else score_l2
+
+
+def score_single(bvid: str, taste=None) -> dict[str, Any] | None:
+    """对单个视频跑通L1+L2+L3，调试专用。"""
+    from bili_tool.bili_api import get_video_info, get_subtitle_text
+    info = get_video_info(bvid)
+    if not info:
+        return None
+    candidate = {
+        "bvid": bvid,
+        "title": info.get("title", ""),
+        "up_mid": info.get("owner", {}).get("mid", 0),
+        "up_name": info.get("owner", {}).get("name", ""),
+        "duration_sec": info.get("duration", 0),
+        "play_count": info.get("stat", {}).get("view", 0),
+        "partition": info.get("tname", ""),
+    }
+    candidates = score_l1([candidate], taste)
+    if not candidates:
+        return candidate
+    candidates = score_l2(candidates, taste)
+    if not candidates:
+        return candidate
+    candidates = score_l3(candidates, taste)
+    return candidates[0] if candidates else candidate
