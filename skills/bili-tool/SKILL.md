@@ -1,7 +1,7 @@
 ---
 name: bili-tool
 description: B站自动化内容发现与推荐系统 — 四策略发现 → 三层打分 → GPU转录 → LLM精校 → Obsidian笔记的完整管道。运行、配置、故障排查指南。
-version: 1.0.0
+version: 1.1.0
 author: 陈懿灵
 created: 2026-06-10
 ---
@@ -12,25 +12,42 @@ created: 2026-06-10
 
 `bili_tool` 是一个端到端的 B 站高质量内容发现管道：从收藏夹/关注链发现候选视频，通过三层打分漏斗筛选，利用 FunASR GPU 转录无字幕视频，最终由 DeepSeek API 逐段精校并写入 Obsidian 笔记。
 
-## 项目结构
+## 项目结构（v0.3.0 去中心化架构）
 
 ```
 bili_tool/
-├── config.py          # 配置类：路径、阈值、API密钥（从.env读取）
-├── storage.py         # SQLite 三表：candidates / taste_profile / recommend_history
-├── bili_api.py        # B站 API 封装：搜索、视频信息、字幕获取、关注列表
-├── taste.py           # 口味画像：话题权重、UP主权重、黑名单、风格标签
-├── discovery.py       # 四策略发现：UP主蔓延 / 关联推荐 / 关键词搜索 / 分区探索
-├── scoring.py         # L1/L2/L3 三层打分，L2 自动选 GPU 版
-├── curator.py         # 策展：去重、排序、截断
-├── feedback.py        # 反馈解析：三级（auto/ask/conversation）
-├── analyzer.py        # DeepSeek API LLM 精校，增量保存笔记
-├── gpu_monitor.py     # VRAM 监视器，异步转录管理器
-├── cli.py             # CLI 入口，cmd_daily 全流程
-├── .env               # 环境变量：BILI_SESSDATA, DEEPSEEK_API_KEY 等
-├── PROBLEMS.md        # 已知问题清单
-└── __init__.py
+├── pipeline.py        # 管道编排（一键运行入口）
+├── state.py           # 状态查询（纯读）
+├── notes.py           # Obsidian笔记读写（模板集中锁定）
+├── transcribe.py      # GPU转录 + B站API工具
+├── config.py          # 全局配置（11个可调阈值）
+├── storage.py         # SQLite 持久化
+├── taste.py           # 用户画像（话题/UP主权重/黑名单）
+├── discovery.py       # 四策略发现引擎 + 双池探索
+├── pool.py            # 5池并行引擎（PoolRunner + GPU队列）
+├── scoring.py         # L1/L2/L3 打分 + 鸡汤指数
+├── curator.py         # 策展（去重/排序/多样性 + ceiling）
+├── checkpoint.py      # 管道检查点（3时间节点 + 5池模式）
+├── feedback.py        # 三级反馈解析
+├── analyzer.py        # DeepSeek LLM 精校（分段API）
+├── gpu_monitor.py     # VRAM 监视
+├── cache.py           # 断点续传缓存
+├── notes.py           # Obsidian笔记（模板锁定）
+├── state.py           # 状态查询
+├── transcribe.py      # GPU转录 + 字幕工具
+├── _review.py         # 定期回顾引擎
+├── cli.py             # CLI（人用）
+├── __init__.py        # 统一导出
+├── .env               # 环境变量
+└── PROBLEMS.md        # 已知问题清单
 ```
+
+### 架构特点
+
+**去中心化工具箱 + 5池并行引擎（v0.4.0）**：
+- **人用**：`pipeline.run_daily()` 一键运行（旧），`pipeline.run_daily_5pool()` 5池并行（新）
+- **AI用**：`from bili_tool.pool import PoolRunner` 自由组合
+- **5池模式**：5个分区池并行搜索，GPU队列自适应调度，种子数据（141关注+收藏夹）注入搜索
 
 ## 快速启动
 
@@ -263,6 +280,49 @@ python -m bili_tool.cli blacklist list        # 查看黑名单
 - auto 级拉黑 → 对应风格标签直接置零（不等待已交流）
 - conversation 级新维度 → 经用户确认后写入画像，初始权重 0.5
 - 同一维度 3 次正向反馈 → 权重锁定（不再自动下调）
+
+## 定期回顾（每3天）
+
+AI 每 3 天（或用户说"做定期回顾"/"回顾最近笔记"时）自动触发一次深度回顾。
+
+### 数据范围
+
+扫描最近 3 天的所有推荐笔记，提取：
+- 所有 💬 逐段看法（按视频、按段落归类）
+- 所有 📝 视频评论
+- 所有 💬 总体反馈
+- 每条视频的精校文本、评分、推荐理由
+
+### 分析框架（5 层递增，逐层讨论）
+
+| 层次 | 分析内容 | AI 提出的问题 |
+|------|---------|-------------|
+| ① 内容层 | 3天推了什么：话题分布、质量分布、有无鸡汤漏网 | "这3天推荐的X条视频中，历史占Y条，你觉得这个比例合理吗？" |
+| ② 批注层 | 你写的 💬 逐段看法：哪些正面/负面、哪些维度反复提及 | "你连续3次提到'论证不严谨'，具体是指逻辑还是数据？" |
+| ③ 评论层 | 你的 📝 总体倾向：喜欢哪些 UP 主、排斥什么风格 | "你对UP主A的态度是'还行但不够深'，要不要降低他的权重？" |
+| ④ 反馈层 | 你的 💬 系统反馈：有没有新的画像维度种子 | "你提到'更看重一手资料'，要不要把这个加入画像维度？" |
+| ⑤ 优化层 | AI 综合上述提出具体优化建议 | "建议：① 拉黑UP主B ② 哲学方向权重+0.05 ③ 历史类减少推送" |
+
+### 讨论方式
+
+**不是单向报告**——AI 每层讲完后停下来，等待用户判断（同意/反对/补充/跳过）。全部讨论完成后：
+
+- 新维度写入 `bili-tool-profile` skill
+- 权重调整写入数据库 `taste_profile`
+- 讨论摘要记录到 Obsidian `笔记/定期回顾/回顾-YYYY-MM-DD.md`
+
+### 触发关键词
+
+- "做定期回顾"
+- "回顾最近笔记"
+- "最近推的怎么样"
+- "分析一下这几天的推荐"
+
+### 代码入口
+
+
+
+
 
 ## 推荐节奏
 
