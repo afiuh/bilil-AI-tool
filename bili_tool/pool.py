@@ -137,8 +137,14 @@ class PoolRunner:
         for c in candidates:
             self._defer_transcription(c)
         self._collect_transcriptions(candidates)
-        # [IO] 字幕缓存：保存到候选dict供后续使用
+        # [IO] 视频级缓存：打分+字幕持久化
         for c in candidates:
+            bvid = c.get('bvid', '')
+            if bvid:
+                from bili_tool.cache import cache_scoring, cache_subtitle
+                cache_scoring(bvid, c)
+                if c.get('subtitle_text'):
+                    cache_subtitle(bvid, c['subtitle_text'])
             c['_cached_subtitle'] = c.get('subtitle_text', '')
         # GPU失败的无字幕视频在_collect_transcriptions中已置为空字符串
         return score_l2(candidates, self.taste)

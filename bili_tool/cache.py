@@ -75,3 +75,64 @@ def clear_all() -> None:
     if CACHE_ROOT.exists():
         shutil.rmtree(CACHE_ROOT)
         logger.info("全部缓存已清理")
+
+
+# ═══════════════════════════════════════════
+# 视频级缓存（v0.4.0）
+# ═══════════════════════════════════════════
+
+VIDEO_CACHE_DIR = CACHE_ROOT.parent / "video_cache"
+
+
+def save_video(bvid: str, data: dict) -> str:
+    """保存单视频缓存。返回文件路径。"""
+    d = VIDEO_CACHE_DIR
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / f"{bvid}.json"
+    from datetime import datetime
+    data["cached_at"] = datetime.now().isoformat()
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(path)
+
+
+def load_video(bvid: str) -> dict | None:
+    """加载单视频缓存。不存在返回None。"""
+    path = VIDEO_CACHE_DIR / f"{bvid}.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def has_video(bvid: str) -> bool:
+    """检查视频是否已缓存。"""
+    return (VIDEO_CACHE_DIR / f"{bvid}.json").exists()
+
+
+def cache_scoring(bvid: str, candidate: dict) -> None:
+    """缓存单个视频的打分数据。已存在则合并更新。"""
+    existing = load_video(bvid) or {}
+    existing["bvid"] = bvid
+    existing["title"] = candidate.get("title", existing.get("title", ""))
+    existing["up_mid"] = candidate.get("up_mid", existing.get("up_mid", 0))
+    existing["up_name"] = candidate.get("up_name", existing.get("up_name", ""))
+    existing["duration_sec"] = candidate.get("duration_sec", existing.get("duration_sec", 0))
+    existing["partition"] = candidate.get("partition", existing.get("partition", ""))
+    existing["scoring"] = {
+        "l1": candidate.get("score_l1", existing.get("scoring", {}).get("l1", 0)),
+        "l2": candidate.get("score_l2", existing.get("scoring", {}).get("l2", 0)),
+        "l3": candidate.get("score_l3", existing.get("scoring", {}).get("l3", 0)),
+        "soup": candidate.get("soup_score", existing.get("scoring", {}).get("soup", -1)),
+    }
+    save_video(bvid, existing)
+
+
+def cache_subtitle(bvid: str, text: str) -> None:
+    """缓存单个视频的字幕。已存在则合并更新。"""
+    existing = load_video(bvid) or {}
+    existing["bvid"] = bvid
+    existing["subtitle"] = text
+    existing["subtitle_len"] = len(text)
+    save_video(bvid, existing)
