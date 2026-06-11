@@ -33,7 +33,7 @@ bili_tool/
 ├── gpu_monitor.py     # VRAM 监视
 ├── cache.py           # 断点续传缓存
 ├── notes.py           # Obsidian笔记（模板锁定）
-├── state.py           # 状态查询
+
 ├── transcribe.py      # GPU转录 + 字幕工具
 ├── _review.py         # 定期回顾引擎
 ├── cli.py             # CLI（人用）
