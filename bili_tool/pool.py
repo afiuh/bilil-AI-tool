@@ -244,7 +244,7 @@ def _transcribe_one(task, device):
                 if dl >= 600 * 16000:
                     break
         tmp.close()
-        results = transcribe_batch_gpu({bvid: (tmp.name, None)}, device=device)
+        results = transcribe_batch_gpu({bvid: (tmp.name, None)})
         return results.get(bvid, "")
     finally:
         try:
