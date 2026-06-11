@@ -237,7 +237,10 @@ def process_gpu_queue(device="cuda:0"):
 def _transcribe_one(task, device):
     import requests, tempfile, os
     from bili_tool.config import get_config
-    from bili_tool.bili_api import transcribe_batch_gpu
+    import torch
+    if torch.cuda.is_available():
+ torch.cuda.empty_cache()
+from bili_tool.bili_api import transcribe_batch_gpu
     cfg = get_config()
     bvid = task["bvid"]
     resp = requests.get(task["audio_url"], headers=cfg.headers, cookies=cfg.cookie_dict, timeout=120, stream=True)
