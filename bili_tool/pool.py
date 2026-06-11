@@ -1,5 +1,6 @@
 """5池并行发现引擎。"""
 import logging, queue, threading, time
+from pathlib import Path
 logger = logging.getLogger(__name__)
 _gpu_queue = queue.Queue()
 _pool_results = {}
@@ -270,8 +271,15 @@ def is_partition_blacklisted(partition_id: int) -> bool:
 def extract_seed_data(taste) -> dict:
     """从用户画像提取种子数据。返回 {followed_mids: [int], seed_bvids: [str]}。"""
     mids = list(taste.followed_mids) if hasattr(taste, 'followed_mids') and taste.followed_mids else []
-    # 收藏夹 BV 号（B站 API 暂不可用，留空待后续修复）
-    bvids = []  # TODO: 接入 B站收藏夹 API
+    # 收藏夹 BV 号（从 seed_bvids.json 读取）
+    import json as _json
+    bvids = []
+    seed_file = Path(__file__).parent / 'seed_bvids.json'
+    if seed_file.exists():
+        try:
+            bvids = _json.loads(seed_file.read_text(encoding='utf-8'))
+        except Exception:
+            pass
     return {"followed_mids": mids, "seed_bvids": bvids}
 
 
