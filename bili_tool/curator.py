@@ -35,6 +35,39 @@ def curate(
     # 按 L3 分排序
     unique.sort(key=lambda x: x.get("score_l3", 0), reverse=True)
 
-    result = unique[:limit]
-    logger.info(f"策展: {len(candidates)} → {len(result)}")
-    return result
+    # 多样性约束：确保每个核心方向至少有 floor 条
+    DIVERSITY_FLOOR = 1   # 每个方向最少条数
+    topic_categories = {
+        "历史": ["人文历史", "历史"],
+        "哲学/社科": ["社科·法律·心理", "哲学"],
+        "影视": ["影视杂谈", "电影", "电视剧"],
+    }
+
+    # 第一轮：从每个方向取 floor 条最高分的
+    result: list[dict[str, Any]] = []
+    used: set[str] = set()
+    for topic, partitions in topic_categories.items():
+        for c in unique:
+            if c["bvid"] in used:
+                continue
+            partition = c.get("partition", "")
+            title = c.get("title", "")
+            # 匹配分区或标题关键词
+            if any(p in partition for p in partitions) or any(kw in title for kw in partitions):
+                result.append(c)
+                used.add(c["bvid"])
+                if len([r for r in result if any(
+                    p in r.get("partition", "") for p in partitions
+                )]) >= DIVERSITY_FLOOR:
+                    break
+
+    # 第二轮：剩余名额按 L3 分补满
+    for c in unique:
+        if len(result) >= limit:
+            break
+        if c["bvid"] not in used:
+            result.append(c)
+            used.add(c["bvid"])
+
+    logger.info(f"策展: {len(candidates)} → {len(result)} (含多样性约束)")
+    return result[:limit]
