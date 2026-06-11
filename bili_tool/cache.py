@@ -136,3 +136,17 @@ def cache_subtitle(bvid: str, text: str) -> None:
     existing["subtitle"] = text
     existing["subtitle_len"] = len(text)
     save_video(bvid, existing)
+
+
+def cleanup_non_selected(selected_bvids: list[str]) -> int:
+    """删除未入选最终推荐的视频缓存。返回删除数。"""
+    if not VIDEO_CACHE_DIR.exists():
+        return 0
+    removed = 0
+    for cache_file in VIDEO_CACHE_DIR.glob("*.json"):
+        bvid = cache_file.stem
+        if bvid not in selected_bvids:
+            cache_file.unlink()
+            removed += 1
+    logger.info(f"缓存清理: 保留{len(selected_bvids)}条, 删除{removed}条")
+    return removed

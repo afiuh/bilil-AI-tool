@@ -262,7 +262,12 @@ def run_daily_5pool(
     logger.info("GPU转录完成: %d 条", gpu_count)
     clear_pool_results()
 
-    # ⑤ 合并+排序
+    # ⑤ 缓存清理 — 落选的从 video_cache 删除
+    from bili_tool.cache import cleanup_non_selected
+    selected_bvids = [x["bvid"] for x in all_candidates]
+    cleanup_non_selected(selected_bvids)
+
+    # ⑥ 合并+排序
     from bili_tool.pool import merge_pool_results
     all_candidates = merge_pool_results(pool_results)
 
@@ -273,7 +278,7 @@ def run_daily_5pool(
     ranked = all_candidates  # merge_pool_results 已排序
     final = ranked[:limit]
 
-    # ⑥ 写笔记+精校
+    # ⑦ 写笔记+精校
     from datetime import date
     today = datetime.now().strftime("%Y-%m-%d-%H")
     note_path = write_recommendations(final, taste, today, note_dir)
