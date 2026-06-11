@@ -224,7 +224,11 @@ def run_daily_5pool(
     selected = random.sample(PARTITION_WHITELIST, min(5, len(PARTITION_WHITELIST)))
     logger.info("选中分区: %s", selected)
 
-    # ② 建5个池
+    # ①.5 提取种子数据
+    from bili_tool.pool import extract_seed_data
+    seeds = extract_seed_data(taste)
+
+    # ② 建5个池，注入种子
     pools = []
     for i, pid in enumerate(selected):
         kw = PARTITION_KEYWORDS.get(pid, ["深度", "解读"])
@@ -235,6 +239,8 @@ def run_daily_5pool(
             taste=taste,
             max_retries=2,
         )
+        runner.seed_mids = seeds["followed_mids"]
+        runner.seed_bvids = seeds["seed_bvids"]
         pools.append(runner)
 
     # ③ 并行跑搜索+打分（线程池）

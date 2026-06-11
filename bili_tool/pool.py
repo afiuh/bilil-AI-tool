@@ -50,8 +50,14 @@ class PoolRunner:
         from bili_tool.bili_api import search_videos
         sort = SEARCH_SORTS[self._sort_idx % len(SEARCH_SORTS)]
         kw = self.keywords[self._sort_idx % len(self.keywords)]
+        import random as _random
+        time.sleep(_random.uniform(0.5, 2.0))  # [IO] 防止5池并发触发B站风控
         try:
-            results = search_videos(kw, page=self._page, page_size=15)
+            # 注入种子数据提升搜索质量
+            kwargs = {'page': self._page, 'page_size': 15}
+            if self.seed_mids and self._page == 1:
+                kwargs['up_mid'] = self.seed_mids[0]
+            results = search_videos(kw, **kwargs)
         except Exception as e:
             logger.warning("[%s] search: %s", self.pool_id, e)
             return []
