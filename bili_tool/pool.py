@@ -184,7 +184,8 @@ class PoolRunner:
             time.sleep(0.5)
         for c in pending.values():
             c["subtitle_text"] = ""
-            logger.warning(f"[{self.pool_id}] GPU转录失败/超时: {c.get('bvid','?')}")
+            c["_gpu_error"] = True  # 管道故障标记，非视频质量问题
+            logger.warning(f"[{self.pool_id}] GPU故障(非视频问题): {c.get('bvid','?')}")
 
     def _score_l3(self, candidates):
         from bili_tool.scoring import score_l3
@@ -239,8 +240,8 @@ def _transcribe_one(task, device):
     from bili_tool.config import get_config
     import torch
     if torch.cuda.is_available():
- torch.cuda.empty_cache()
-from bili_tool.bili_api import transcribe_batch_gpu
+        torch.cuda.empty_cache()
+    from bili_tool.bili_api import transcribe_batch_gpu
     cfg = get_config()
     bvid = task["bvid"]
     resp = requests.get(task["audio_url"], headers=cfg.headers, cookies=cfg.cookie_dict, timeout=120, stream=True)

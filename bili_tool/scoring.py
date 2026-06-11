@@ -132,11 +132,12 @@ def score_l2(candidates: list[dict[str, Any]], taste: TasteProfile) -> list[dict
             logger.info(f"跳过 {bvid}: 字幕仅{len(subtitle)}字，疑似非中文内容")
             continue
         if not subtitle:
-            # 无字幕 → GPU转录失败 → 降分保留
+            # GPU转录失败 → 管道故障，给中性分不惩罚
             base = c.get("score_l1", 0.3)
             title = c.get("title", "")
             depth_bonus = sum(0.03 for w in ["深度","解读","底层逻辑","拆解","密码","分析","系统","万字"] if w in title)
-            c["score_l2"] = round(min(base * 0.85 + depth_bonus, 1.0), 3)
+            c["score_l2"] = round(min(base * 0.95 + depth_bonus, 1.0), 3)  # 0.85→0.95 不惩罚
+            c["_gpu_failed"] = True
             survivors.append(c)
             continue
 
@@ -471,11 +472,12 @@ def score_l2_gpu(candidates, taste):
                 c["score_l2"] = round(score, 3)
                 survivors.append(c)
             continue
-        # 无字幕 → GPU转录失败 → 降分保留
+        # GPU转录失败 → 管道故障，给中性分不惩罚
         base = c.get("score_l1", 0.3)
         title = c.get("title", "")
         depth_bonus = sum(0.03 for w in ["深度","解读","底层逻辑","拆解","分析"] if w in title)
-        c["score_l2"] = round(min(base * 0.85 + depth_bonus, 1.0), 3)
+        c["score_l2"] = round(min(base * 0.95 + depth_bonus, 1.0), 3)
+        c["_gpu_failed"] = True
         survivors.append(c)
 
     survivors.sort(key=lambda x: x.get("score_l2", 0), reverse=True)
