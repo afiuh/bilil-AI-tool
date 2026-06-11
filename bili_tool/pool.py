@@ -307,6 +307,20 @@ def vram_safe_to_transcribe(threshold: float = 0.85, vram_fn=None) -> bool:
     try:
         info = vram_fn()
         used_ratio = info["used"] / info["total"]
-        return used_ratio < threshold
+        if used_ratio >= threshold:
+            logger.warning(f"VRAM过高: {used_ratio:.0%} > {threshold:.0%}，暂停转录")
+            return False
+        # 额外检查：PyTorch已分配显存
+        try:
+            import torch
+            if torch.cuda.is_available():
+                allocated = torch.cuda.memory_allocated(0) / 1024**3
+                total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                if allocated / total >= threshold:
+                    logger.warning(f"PyTorch已占{allocated:.1f}GB/{total:.1f}GB，暂停转录")
+                    return False
+        except Exception:
+            pass
+        return True
     except Exception:
         return True  # 查询失败不阻塞
