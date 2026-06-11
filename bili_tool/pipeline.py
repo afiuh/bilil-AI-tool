@@ -23,10 +23,23 @@ def run_daily(
     from bili_tool.notes import write_recommendations
     from datetime import date
 
-    logger.info("=== 管道启动 ===")
+    from datetime import date
+    from bili_tool.cache import save, load, get_latest_stage, cleanup
+    run_id = date.today().strftime("%Y-%m-%d")
+    latest = get_latest_stage(run_id)
+
+    if latest:
+        logger.info(f"=== 管道恢复（从缓存 {latest}） ===")
+    else:
+        logger.info("=== 管道启动 ===")
 
     # ① 发现
-    candidates = discover_all(taste)
+    if latest and latest >= "01_discovery":
+        candidates = load("01_discovery", run_id) or discover_all(taste)
+    else:
+        candidates = discover_all(taste)
+        save("01_discovery", candidates, run_id)
+
     if not candidates:
         logger.warning("发现阶段无结果")
         return None
@@ -39,9 +52,23 @@ def run_daily(
         logger.warning(f"[检查点1] ⚠️ {cp1['warning']}")
 
     # ② 打分
-    candidates = score_l1(candidates, taste)
-    candidates = score_l2(candidates, taste)
-    candidates = score_l3(candidates, taste)
+    if latest and latest >= "02_l1":
+        candidates = load("02_l1", run_id) or score_l1(candidates, taste)
+    else:
+        candidates = score_l1(candidates, taste)
+        save("02_l1", candidates, run_id)
+
+    if latest and latest >= "03_l2":
+        candidates = load("03_l2", run_id) or score_l2(candidates, taste)
+    else:
+        candidates = score_l2(candidates, taste)
+        save("03_l2", candidates, run_id)
+    if latest and latest >= "04_l3":
+        candidates = load("04_l3", run_id) or score_l3(candidates, taste)
+    else:
+        candidates = score_l3(candidates, taste)
+        save("04_l3", candidates, run_id)
+
     if not candidates:
         logger.warning("打分后无幸存者")
         return None
@@ -55,6 +82,7 @@ def run_daily(
 
     # ③ 策展
     candidates = curate(candidates, db, limit=limit)
+    save("05_curated", candidates, run_id)
 
     # 写入笔记（分析字段暂为空，后续精校填充）
     today = date.today().strftime("%Y-%m-%d")
@@ -77,6 +105,9 @@ def run_daily(
     logger.info(f"[检查点3] {cp3['summary']}")
     if cp3.get('warning'):
         logger.warning(f"[检查点3] ⚠️ {cp3['warning']}")
+
+    # 清理缓存
+    cleanup(run_id)
 
     logger.info(f"✅ 管道完成: {note_path}")
     return note_path
