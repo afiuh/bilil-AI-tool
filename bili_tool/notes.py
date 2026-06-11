@@ -76,6 +76,10 @@ def _build_note_content(
     today: str,
 ) -> str:
     """构建笔记内容（内部函数，格式锁定）。"""
+    from bili_tool.config import get_config
+    cfg = get_config()
+    ph = cfg.placeholder_analysis
+
     lines = [
         f"# 📺 AI 推荐视频 — {today}",
         "",
