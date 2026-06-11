@@ -38,7 +38,9 @@ def run_daily(
     if latest:
         logger.info(f"=== 管道恢复（从缓存 {latest}） ===")
     else:
-        logger.info("=== 管道启动 ===")
+        from bili_tool.bootstrap import ensure_fresh
+    ensure_fresh()
+    logger.info("=== 管道启动 ===")
 
     # ① 发现
     if latest and latest >= "01_discovery":
@@ -217,6 +219,8 @@ def run_daily_5pool(
     from bili_tool.notes import write_recommendations
     from bili_tool.curator import rank
 
+    from bili_tool.bootstrap import ensure_fresh
+    ensure_fresh()
     logger.info("=== 5池管道启动 ===")
 
     # ① 随机选5个分区
@@ -262,21 +266,21 @@ def run_daily_5pool(
     logger.info("GPU转录完成: %d 条", gpu_count)
     clear_pool_results()
 
-    # [检查点] L2后 — 字幕产出+GPU+缓存
+    # ⑤ 合并+排序（先合并才能检查）
+    from bili_tool.pool import merge_pool_results
+    all_candidates = merge_pool_results(pool_results)
+
+    # ⑥ 检查点：字幕产出+GPU+缓存
     from bili_tool.checkpoint import check_subtitle_production
     cp_sub = check_subtitle_production(all_candidates)
     logger.info("[检查点·字幕] %s", cp_sub['summary'])
     if cp_sub.get('warning'):
         logger.warning("[检查点·字幕] ⚠️ %s", cp_sub['warning'])
 
-    # ⑤ 缓存清理 — 落选的从 video_cache 删除
+    # ⑦ 缓存清理 — 落选的从 video_cache 删除
     from bili_tool.cache import cleanup_non_selected
     selected_bvids = [x["bvid"] for x in all_candidates]
     cleanup_non_selected(selected_bvids)
-
-    # ⑥ 合并+排序
-    from bili_tool.pool import merge_pool_results
-    all_candidates = merge_pool_results(pool_results)
 
     if not all_candidates:
         logger.warning("5池全部空产")
@@ -285,7 +289,7 @@ def run_daily_5pool(
     ranked = all_candidates  # merge_pool_results 已排序
     final = ranked[:limit]
 
-    # ⑦ 写笔记+精校
+    # ⑧ 写笔记+精校
     from datetime import date
     today = datetime.now().strftime("%Y-%m-%d-%H")
     note_path = write_recommendations(final, taste, today, note_dir)
