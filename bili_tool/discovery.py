@@ -23,6 +23,7 @@ from bili_tool.bili_api import (
 )
 from bili_tool.config import get_config
 from bili_tool.taste import TasteProfile
+from bili_tool.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,20 @@ def discover(
     for kw in keywords[:5]:
         results = search_videos(kw, page=1, page_size=20)
         add(results, cfg.max_per_strategy)
+
+    # 策略 3b：探索池（冷门方向轮换，避免历史垄断）
+    cfg = get_config()
+    if cfg.explore_ratio > 0:
+        explore_kw = getattr(cfg, 'explore_keywords', [])
+        if explore_kw:
+            import random
+            sampled = random.sample(explore_kw, min(3, len(explore_kw)))
+            for kw in sampled:
+                try:
+                    results = search_videos(kw, page=1, page_size=15)
+                    add(results, cfg.max_per_strategy)
+                except Exception:
+                    continue
 
     # 策略 4：分区探索
     logger.info("策略4: 分区探索")
