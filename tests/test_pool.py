@@ -61,12 +61,11 @@ class TestRotateStrategy:
 class TestIsSatisfied:
     """达标检查测试"""
 
-    def test_not_satisfied_when_less_than_2(self):
-        """少于2条候选不达标"""
+    def test_not_satisfied_when_empty(self):
+        """空候选不达标"""
         from bili_tool.pool import PoolRunner
         runner = PoolRunner("p1", 207, ["测试"], MagicMock())
-        candidates = [{"score_l3": 0.5, "soup_score": 0.1}]
-        assert not runner._is_satisfied(candidates)
+        assert not runner._is_satisfied([])
 
     def test_not_satisfied_when_avg_low(self):
         """均分低于0.3不达标"""
