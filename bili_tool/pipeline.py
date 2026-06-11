@@ -262,6 +262,13 @@ def run_daily_5pool(
     logger.info("GPU转录完成: %d 条", gpu_count)
     clear_pool_results()
 
+    # [检查点] L2后 — 字幕产出+GPU+缓存
+    from bili_tool.checkpoint import check_subtitle_production
+    cp_sub = check_subtitle_production(all_candidates)
+    logger.info("[检查点·字幕] %s", cp_sub['summary'])
+    if cp_sub.get('warning'):
+        logger.warning("[检查点·字幕] ⚠️ %s", cp_sub['warning'])
+
     # ⑤ 缓存清理 — 落选的从 video_cache 删除
     from bili_tool.cache import cleanup_non_selected
     selected_bvids = [x["bvid"] for x in all_candidates]
@@ -290,6 +297,13 @@ def run_daily_5pool(
         from bili_tool.analyzer import post_analyze_note
         updated = post_analyze_note(note_path, api_key)
         logger.info("精校: %d 条", updated)
+
+        # [检查点] 精校后 — 翻看笔记
+        from bili_tool.checkpoint import check_final_note
+        cp_note = check_final_note(note_path)
+        logger.info("[检查点·笔记] %s", cp_note['summary'])
+        if cp_note.get('warning'):
+            logger.warning("[检查点·笔记] ⚠️ 错误日志已写入笔记末尾")
 
     # 检查点
     from bili_tool.checkpoint import check_output

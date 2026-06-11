@@ -179,3 +179,135 @@ def check_pool_merge(results: dict, taste=None) -> dict:
             "partition_dist": dict(partitions.most_common(5)),
         },
     }
+
+
+def check_subtitle_production(candidates: list[dict]) -> dict:
+    """检查点：L2后 — 字幕产出 + GPU状态 + 缓存完整性。"""
+    total = len(candidates)
+    if total == 0:
+        return {"ok": False, "stage": "L2后", "warning": "无候选",
+                "summary": "L2后无幸存者", "details": {}}
+
+    cc_count = 0
+    gpu_count = 0
+    gpu_fail = 0
+    no_sub = 0
+    cache_ok = 0
+    cache_miss = 0
+    short_sub = 0
+
+    from bili_tool.cache import load_video
+
+    for c in candidates:
+        bvid = c.get("bvid", "")
+        sub = c.get("subtitle_text", "")
+
+        if not sub:
+            no_sub += 1
+        elif len(sub) < 100:
+            short_sub += 1
+        elif c.get("_gpu_transcribed"):
+            gpu_count += 1
+        else:
+            cc_count += 1
+
+        # 检查视频缓存
+        cached = load_video(bvid)
+        if cached and cached.get("subtitle"):
+            cache_ok += 1
+        elif sub:
+            cache_miss += 1
+
+    # GPU失败检查
+    gpu_fail = no_sub + short_sub
+    warnings = []
+    if gpu_fail > total * 0.3:
+        warnings.append(f"字幕缺失率{gpu_fail/total:.0%}")
+    if cache_miss > 0:
+        warnings.append(f"{cache_miss}条缓存未写入")
+    if short_sub > 0:
+        warnings.append(f"{short_sub}条字幕过短(<100字)")
+
+    return {
+        "ok": len(warnings) == 0,
+        "stage": "L2后",
+        "warning": "; ".join(warnings) if warnings else "",
+        "summary": (
+            f"字幕: CC{cc_count} GPU{gpu_count} 缺失{no_sub} 过短{short_sub}。"
+            f"缓存: {cache_ok}/{total}就绪。"
+        ),
+        "details": {
+            "total": total,
+            "cc_subtitle": cc_count,
+            "gpu_transcribed": gpu_count,
+            "no_subtitle": no_sub,
+            "short_subtitle": short_sub,
+            "cache_ok": cache_ok,
+            "cache_miss": cache_miss,
+        },
+    }
+
+
+def check_final_note(note_path: str) -> dict:
+    """检查点：精校后 — 翻看最终笔记，验证完整性。"""
+    from pathlib import Path
+    p = Path(note_path)
+    if not p.exists():
+        return {"ok": False, "stage": "精校后", "warning": "笔记不存在",
+                "summary": note_path, "details": {}}
+
+    content = p.read_text(encoding="utf-8")
+    import re
+
+    video_count = content.count("### 📋 基本信息")
+    placeholder = content.count("⏳ 待精校")
+    truncated = len(re.findall(r"截断|truncat", content, re.IGNORECASE))
+    empty_analysis = content.count("（待分析）")
+    has_bvid = len(re.findall(r'BV[0-9a-zA-Z]{10}', content))
+    has_score = content.count("综合评分")
+    has_review_checkbox = content.count("✅ 已阅")
+    has_comm_checkbox = content.count("✅ 已交流")
+
+    warnings = []
+    if placeholder > 0:
+        warnings.append(f"{placeholder}条未精校")
+    if truncated > 0:
+        warnings.append(f"检测到{truncated}处截断")
+    if empty_analysis > 0:
+        warnings.append(f"{empty_analysis}条内容分析为空")
+    if video_count == 0:
+        warnings.append("笔记无视频条目")
+    if has_bvid < video_count:
+        warnings.append("BV号缺失")
+
+    # 错误日志：需要改代码的问题写进笔记
+    if warnings:
+        error_note = (
+            f"\n\n---\n"
+            f"## ⚠️ AI审查日志\n\n"
+            f"检查时间：自动\n"
+            f"发现 {len(warnings)} 个问题：\n\n"
+        )
+        for w in warnings:
+            error_note += f"- ⚠️ {w}\n"
+        with open(note_path, "a", encoding="utf-8") as f:
+            f.write(error_note)
+
+    return {
+        "ok": len(warnings) == 0,
+        "stage": "精校后",
+        "warning": "; ".join(warnings) if warnings else "",
+        "summary": (
+            f"笔记 {p.name}: {video_count}条视频, {len(content)}字。"
+            f"精校{video_count - placeholder}/{video_count}。"
+            f"截断{truncated}处。"
+        ),
+        "details": {
+            "video_count": video_count,
+            "placeholder": placeholder,
+            "truncated": truncated,
+            "bvids": has_bvid,
+            "scores": has_score,
+            "checkboxes": has_review_checkbox + has_comm_checkbox,
+        },
+    }
