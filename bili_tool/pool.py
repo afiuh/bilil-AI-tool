@@ -195,3 +195,27 @@ def get_gpu_queue_size():
 def clear_pool_results():
     with _results_lock:
         _pool_results.clear()
+
+# ═══════════════════════════════════════════
+# 分区黑名单 + 种子数据
+# ═══════════════════════════════════════════
+
+PARTITION_BLACKLIST = [3, 4, 5, 31, 33, 21, 138, 239]
+
+
+def is_partition_blacklisted(partition_id: int) -> bool:
+    """检查分区是否在黑名单中。"""
+    return partition_id in PARTITION_BLACKLIST
+
+
+def extract_seed_data(taste) -> dict:
+    """从用户画像提取种子数据。返回 {followed_mids: [int], seed_bvids: [str]}。"""
+    mids = list(taste.followed_mids) if hasattr(taste, 'followed_mids') and taste.followed_mids else []
+    bvids = []
+    try:
+        from bili_tool.storage import Database
+        db = Database()
+        bvids = db.get_recent_bvids(days=90)
+    except Exception:
+        pass
+    return {"followed_mids": mids, "seed_bvids": bvids}
