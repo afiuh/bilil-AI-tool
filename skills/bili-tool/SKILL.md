@@ -1,7 +1,7 @@
 ---
 name: bili-tool
 description: B站自动化内容发现与推荐系统 — 四策略发现 → 三层打分 → GPU转录 → LLM精校 → Obsidian笔记的完整管道。运行、配置、故障排查指南。
-version: 1.1.0
+version: 1.2.0
 author: 陈懿灵
 created: 2026-06-10
 ---
@@ -41,6 +41,20 @@ bili_tool/
 ├── .env               # 环境变量
 └── PROBLEMS.md        # 已知问题清单
 ```
+
+
+
+## 数据流（v1.2.0）
+
+```
+config + taste → 发现(5池) → L1 → L2(字幕→video_cache) → L3 → 策展 → 清理缓存 → 笔记骨架 → 精校(读缓存)
+```
+
+**关键变化**：
+- L2字幕持久化到 video_cache/BVxxx.json，精校从缓存读而非调API
+- 策展后自动清理落选视频缓存
+- 笔记不含原始字幕，只留精校文本
+- 2个检查点：字幕产出(L2后) + 精校后翻看笔记
 
 ### 架构特点
 
