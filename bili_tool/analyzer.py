@@ -226,6 +226,19 @@ def post_analyze_note(note_path: str, api_key: str) -> int:
             continue
 
         subtitle = sub_match.group(1)
+
+        # [IO] 优先从视频缓存读字幕和打分
+        bvid_match = re.search(r'BV[\w]+', section)
+        if bvid_match:
+            bvid = bvid_match.group(0)
+            from bili_tool.cache import load_video
+            cached = load_video(bvid)
+            if cached:
+                cached_sub = cached.get('subtitle', '')
+                if cached_sub and len(cached_sub) > len(subtitle):
+                    subtitle = cached_sub
+                    logger.debug(f"使用缓存字幕: {bvid} ({len(subtitle)}字)")
+
         logger.info(f"正在分析: {title[:40]} ({len(subtitle)} 字)")
 
         # [IO] 调 LLM
