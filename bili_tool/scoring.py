@@ -125,6 +125,10 @@ def score_l2(candidates: list[dict[str, Any]], taste: TasteProfile) -> list[dict
 
         # 字幕提取
         subtitle = get_subtitle_text(bvid)
+        if subtitle and len(subtitle) < 100:
+            # 字幕过短 → 非中文内容（外文人名地名FunASR无法识别）
+            logger.info(f"跳过 {bvid}: 字幕仅{len(subtitle)}字，疑似非中文内容")
+            continue
         if not subtitle:
             # 无字幕 → L1分作为基础，标题分析加分（FunASR 太慢，跳过）
             # 无字幕 → L1分作为基础，标题分析加分
@@ -452,6 +456,9 @@ def score_l2_gpu(candidates, taste):
                     if text:
                         c["subtitle_text"] = text
                         c["_gpu_transcribed"] = True
+                        if text and len(text) < 50:
+                            logger.info(f"跳过 {bvid}: GPU转录仅{len(text)}字，疑似非中文")
+                            c["subtitle_text"] = ""  # 清空，下面会按无字幕处理
 
     # 逐个打分
     survivors = []
