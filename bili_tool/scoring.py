@@ -51,10 +51,12 @@ def score_l1(candidates: list[dict[str, Any]], taste: TasteProfile) -> list[dict
         if dur < 60:
             continue
 
-        # [C6] 硬过滤：黑名单
+        # [C6] 硬过滤：黑名单 + 已关注UP主
         mid = c.get("up_mid", 0)
         if taste.is_blacklisted(mid):
             continue
+        if mid in taste.followed_mids:
+            continue  # 已关注的UP主不推荐
 
         # [C6] 硬过滤：内容类型（纪录片/有声书/电视剧/儿童）
         title = c.get("title", "")
