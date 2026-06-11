@@ -96,8 +96,6 @@ def _build_note_content(
         analysis_text = r.get("analysis", "")
         reason = r.get("reason", "")
 
-        full_sub = subtitle[:15000] if subtitle and len(subtitle) > 15000 else subtitle
-
         lines.extend([
             "---",
             "",
