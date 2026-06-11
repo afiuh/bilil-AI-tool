@@ -57,6 +57,25 @@ class Config:
     # ── 输出 ──────────────────────────────────
     daily_count: int = 10              # 每天推荐数量
 
+    # ── 打分阈值 ──
+    soup_threshold: float = 0.6        # 鸡汤指数触发扣分线
+    soup_penalty_base: float = 0.15    # 鸡汤扣分基数
+    soup_penalty_max: float = 0.25     # 鸡汤扣分上限
+    you_rate_threshold: float = 0.008  # 你字率触发线
+    metaphor_density_threshold: float = 0.5  # 比喻密度触发线
+    emotional_density_threshold: float = 1.0  # 情感词密度触发线(/千字)
+
+    # ── 策展阈值 ──
+    diversity_floor: int = 1           # 每个核心方向最少条数
+    topic_ceiling: int = 3             # 同一话题最多推荐数
+    topic_diversity_warn: float = 0.5  # 单话题占比超此值警告
+
+    # ── 精校阈值 ──
+    split_subtitle_chars: int = 6000   # 字幕超此字数分段API调用
+
+    # ── 探索池 ──
+    explore_ratio: float = 0.3         # 探索池占比（0=纯兴趣，1=纯探索）
+
     def __post_init__(self) -> None:
         # [C6] 关键配置缺失直接报错
         if not self.sessdata:

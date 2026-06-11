@@ -62,13 +62,32 @@ def curate(
                 )]) >= DIVERSITY_FLOOR:
                     break
 
-    # 第二轮：剩余名额按 L3 分补满
+    # 第二轮：剩余名额按 L3 分补满，但同话题不超过 ceiling
+    CEILING = get_config().topic_ceiling
+    topic_counts: dict[str, int] = {}
+    for c in result:
+        for topic, partitions in topic_categories.items():
+            if any(p in c.get("partition", "") for p in partitions):
+                topic_counts[topic] = topic_counts.get(topic, 0) + 1
+                break
+
     for c in unique:
         if len(result) >= limit:
             break
         if c["bvid"] not in used:
-            result.append(c)
-            used.add(c["bvid"])
+            # 话题上限检查
+            partition = c.get("partition", "")
+            blocked = False
+            for topic, partitions in topic_categories.items():
+                if any(p in partition for p in partitions):
+                    if topic_counts.get(topic, 0) >= CEILING:
+                        blocked = True
+                    else:
+                        topic_counts[topic] = topic_counts.get(topic, 0) + 1
+                    break
+            if not blocked:
+                result.append(c)
+                used.add(c["bvid"])
 
     logger.info(f"策展: {len(candidates)} → {len(result)} (含多样性约束)")
     return result[:limit]
@@ -137,6 +156,17 @@ def enforce_diversity(
         if len(result) >= limit:
             break
         if c["bvid"] not in used:
-            result.append(c)
-            used.add(c["bvid"])
+            # 话题上限检查
+            partition = c.get("partition", "")
+            blocked = False
+            for topic, partitions in topic_categories.items():
+                if any(p in partition for p in partitions):
+                    if topic_counts.get(topic, 0) >= CEILING:
+                        blocked = True
+                    else:
+                        topic_counts[topic] = topic_counts.get(topic, 0) + 1
+                    break
+            if not blocked:
+                result.append(c)
+                used.add(c["bvid"])
     return result[:limit]

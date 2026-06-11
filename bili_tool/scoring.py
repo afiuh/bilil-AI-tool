@@ -88,7 +88,7 @@ def _calc_l1_score(c: dict[str, Any], taste: TasteProfile, cfg: Any) -> float:
     # UP主信号
     mid = c.get("up_mid", 0)
     up_w = taste.up_weights.get(mid, 0.0)
-    score += up_w * 0.30
+    score += up_w * 0.20
 
     # 标题信号
     title = c.get("title", "")
