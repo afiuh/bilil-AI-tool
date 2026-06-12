@@ -373,14 +373,17 @@ def _run_transcribe_subprocess(audio_path: str, bvid: str) -> dict:
     worker = __import__('pathlib').Path(__file__).parent / "transcribe_worker.py"
     result_file = tempfile.mktemp(suffix=".json")
     try:
-        subprocess.run(
+        proc = subprocess.run(
             [sys.executable, str(worker), audio_path, bvid, result_file],
-            check=True, timeout=600,
+            capture_output=True, text=True,
         )
+        if proc.returncode != 0:
+            stderr_tail = proc.stderr.strip()[-200:] if proc.stderr else "无输出"
+            logger.error("子进程转录失败 %s: %s", bvid, stderr_tail)
         with open(result_file, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        logger.error("子进程转录失败 %s: %s", bvid, e)
+        logger.error("子进程转录异常 %s: %s", bvid, e)
         return {"bvid": bvid, "text": ""}
     finally:
         try:

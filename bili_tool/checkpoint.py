@@ -219,8 +219,11 @@ def check_subtitle_production(candidates: list[dict]) -> dict:
             cache_miss += 1
 
     # GPU失败检查
+    gpu_error_count = sum(1 for c in candidates if c.get('_gpu_error') or c.get('subtitle_text') == '__GPU_ERROR__')
     gpu_fail = no_sub + short_sub
     warnings = []
+    if gpu_error_count > 0:
+        warnings.append(f"{gpu_error_count}条GPU转录故障(需查FunASR日志)")
     if gpu_fail > total * 0.3:
         warnings.append(f"字幕缺失率{gpu_fail/total:.0%}")
     if cache_miss > 0:
