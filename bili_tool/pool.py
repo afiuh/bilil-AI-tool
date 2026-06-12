@@ -238,11 +238,17 @@ def process_gpu_queue(device="cuda:0"):
 def _transcribe_one(task, device, full_length: bool = False):
     import requests, tempfile, os
     from bili_tool.config import get_config
-    import torch, os
+    import torch, os, gc
     os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
     if torch.cuda.is_available():
+        gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
+        # 限制 PyTorch 最多用 3.5 GiB（留空间给 FunASR 模型）
+        try:
+            torch.cuda.set_per_process_memory_fraction(0.58)  # 3.5/6 ≈ 0.58
+        except Exception:
+            pass
     from bili_tool.bili_api import transcribe_batch_gpu
     cfg = get_config()
     bvid = task["bvid"]
