@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 # ════════════════════════════════════
 
 def _transcribe_in_subprocess(audio_path: str, bvid: str, cache_path: str) -> bool:
+    import os
+    os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
     """
     子进程：加载FunASR → 转录 → 写缓存文件。
     主进程通过 ProcessPoolExecutor.submit 调用。
@@ -20,7 +22,7 @@ def _transcribe_in_subprocess(audio_path: str, bvid: str, cache_path: str) -> bo
     try:
         from funasr import AutoModel
         model = AutoModel(
-            model="paraformer-zh", device="cuda:0",
+            model="iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch", device="cuda:0",
             disable_update=True, trust_remote_code=False,
         )
         result = model.generate(input=audio_path, batch_size=1)
