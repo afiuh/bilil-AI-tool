@@ -369,14 +369,21 @@ def _download_audio(task, cfg, full_length=False) -> str | None:
 
 def _run_transcribe_subprocess(audio_path: str, bvid: str) -> dict:
     """子进程转录。干净CUDA上下文，出口自动回收显存。"""
-    import subprocess, json, sys
+    import subprocess, json, sys, tempfile
     worker = __import__('pathlib').Path(__file__).parent / "transcribe_worker.py"
+    result_file = tempfile.mktemp(suffix=".json")
     try:
-        result = subprocess.run(
-            [sys.executable, str(worker), audio_path, bvid],
-            capture_output=True, text=True,
+        subprocess.run(
+            [sys.executable, str(worker), audio_path, bvid, result_file],
+            check=True, timeout=600,
         )
-        return json.loads(result.stdout.strip())
+        with open(result_file, "r", encoding="utf-8") as f:
+            return json.load(f)
     except Exception as e:
         logger.error("子进程转录失败 %s: %s", bvid, e)
         return {"bvid": bvid, "text": ""}
+    finally:
+        try:
+            __import__('os').unlink(result_file)
+        except Exception:
+            pass

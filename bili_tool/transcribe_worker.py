@@ -5,17 +5,25 @@ import sys, json, os
 def main():
     audio_path = sys.argv[1]
     bvid = sys.argv[2]
+    result_file = sys.argv[3]  # 结果写到这里
+    # 重定向 FunASR 日志到 stderr，stdout 只输出 JSON
+    import logging
+    logging.getLogger().setLevel(logging.WARNING)
     try:
         from funasr import AutoModel
         model = AutoModel(
             model="paraformer-zh", device="cuda:0",
             disable_update=True, trust_remote_code=False,
         )
+        import warnings
+        warnings.filterwarnings('ignore')
         result = model.generate(input=audio_path, batch_size=1)
         text = result[0].get("text", "") if result else ""
-        print(json.dumps({"bvid": bvid, "text": text}))
+        with open(result_file, "w", encoding="utf-8") as f:
+            json.dump({"bvid": bvid, "text": text}, f, ensure_ascii=False)
     except Exception as e:
-        print(json.dumps({"bvid": bvid, "text": "", "error": str(e)}))
+        with open(result_file, "w", encoding="utf-8") as f:
+            json.dump({"bvid": bvid, "text": "", "error": str(e)}, f)
         sys.exit(1)
     finally:
         try:
