@@ -140,8 +140,9 @@ def _build_note_content(
 def write_note_from_cache(run_id: str, taste, note_dir: str, limit: int = 10) -> str:
     """从入选的缓存文件直接生成 Obsidian 笔记。"""
     from bili_tool.cache import list_video_data
+    from pathlib import Path
     from datetime import datetime
 
     candidates = list_video_data(run_id)[:limit]
     today = datetime.now().strftime('%Y-%m-%d-%H')
-    return write_recommendations(candidates, taste, today, note_dir)
+    return write_recommendations(candidates, taste, today, Path(note_dir))
