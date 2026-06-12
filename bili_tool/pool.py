@@ -344,3 +344,39 @@ def vram_safe_to_transcribe(threshold: float = 0.85, vram_fn=None) -> bool:
         return True
     except Exception:
         return True  # 查询失败不阻塞
+
+
+def _download_audio(task, cfg, full_length=False) -> str | None:
+    """下载音频到临时文件，返回路径。"""
+    import requests, tempfile
+    bvid = task["bvid"]
+    resp = requests.get(
+        task["audio_url"], headers=cfg.headers, cookies=cfg.cookie_dict,
+        timeout=120, stream=True,
+    )
+    resp.raise_for_status()
+    tmp = tempfile.NamedTemporaryFile(suffix=".m4a", delete=False)
+    downloaded = 0
+    for chunk in resp.iter_content(8192):
+        if chunk:
+            tmp.write(chunk)
+            downloaded += len(chunk)
+            if not full_length and downloaded >= 600 * 16000:
+                break
+    tmp.close()
+    return tmp.name
+
+
+def _run_transcribe_subprocess(audio_path: str, bvid: str) -> dict:
+    """子进程转录。干净CUDA上下文，出口自动回收显存。"""
+    import subprocess, json, sys
+    worker = __import__('pathlib').Path(__file__).parent / "transcribe_worker.py"
+    try:
+        result = subprocess.run(
+            [sys.executable, str(worker), audio_path, bvid],
+            capture_output=True, text=True, timeout=300,
+        )
+        return json.loads(result.stdout.strip())
+    except Exception as e:
+        logger.error("子进程转录失败 %s: %s", bvid, e)
+        return {"bvid": bvid, "text": ""}
