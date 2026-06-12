@@ -313,6 +313,20 @@ python -m bili_tool.cli analyze --verbose
 ## 更新日志
 
 
+### v0.7.0 — whisper.cpp 替换 + 缓存清理 (2026-06-12)
+
+**转录引擎**
+- 换装 whisper.cpp (CUDA) 替换 FunASR
+- 零 PyTorch，GPU转录正常，14分钟视频278秒
+- 模型: whisper-large-v3-f16.gguf (2.9GB)
+
+**新模块**
+- cleanup.py: 缓存清理 — 音频>2天/管道>7天自动删
+- audio_downloader.py: 下载后自动转 wav
+
+**测试**
+全部9个功能模块 + 缓存层 + 清理层，全链路通过
+
 ### v0.6.0 — 去中心化架构 (2026-06-12)
 
 **删除**

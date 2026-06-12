@@ -1,6 +1,6 @@
 ---
 name: bili-tool
-version: 2.0.0
+version: 2.1.0
 description: 去中心化B站内容工具箱。按功能拆分，通过缓存文件夹交换数据，智能体逐步操作。
 ---
 
@@ -15,6 +15,8 @@ description: 去中心化B站内容工具箱。按功能拆分，通过缓存文
 | discovery.py | 搜索发现 | discover_one_zone(), discover_and_cache() |
 | scoring.py | 三层打分 | score_videos(), extract_subtitle_text(), score_chicken_soup() |
 | audio_downloader.py | 音频下载 | download_audio() |
+| transcribe_worker.py | GPU转录(whisper.cpp) | transcribe_batch() |
+| cleanup.py | 缓存清理 | clean_all(), clean_audio(), clean_runs() |
 | transcribe_worker.py | GPU转录 | transcribe_batch() |
 | curator.py | 策展去重 | check_ready(), curate_from_cache() |
 | analyzer.py | DeepSeek精校 | analyze_from_cache() |
@@ -43,6 +45,10 @@ config.py | taste.py | storage.py | feedback.py | gpu_monitor.py | bootstrap.py 
 7. 策展: curate_from_cache() → 去重排序 → 删落选文件
 8. 精校: analyze_from_cache() → DeepSeek → 写回缓存
 9. 笔记: write_note_from_cache() → 读入选文件 → 生成MD
+
+### 清理
+
+智能体说"清理缓存"时调用 。音频>2天、管道>7天自动删。
 
 ### 触发词
 
