@@ -235,7 +235,7 @@ def process_gpu_queue(device="cuda:0"):
     return processed
 
 
-def _transcribe_one(task, device):
+def _transcribe_one(task, device, full_length: bool = False):
     import requests, tempfile, os
     from bili_tool.config import get_config
     import torch
@@ -253,8 +253,8 @@ def _transcribe_one(task, device):
             if chunk:
                 tmp.write(chunk)
                 dl += len(chunk)
-                if dl >= 600 * 16000:
-                    break
+                if not full_length and dl >= 600 * 16000:
+                    break  # 采样模式：只转录前10分钟
         tmp.close()
         results = transcribe_batch_gpu({bvid: (tmp.name, None)})
         return results.get(bvid, "")

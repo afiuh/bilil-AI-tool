@@ -280,7 +280,18 @@ def run_daily_5pool(
     logger.info("GPU转录完成: %d 条", remaining)
     clear_pool_results()
 
-    # ⑥ 合并+排序（先合并才能检查）
+    # ⑥ 全量转录（L2只采样，L3需要全文）
+    full_transcribed = 0
+    for pid, results in pool_results.items():
+        for c in results:
+            if not c.get('subtitle_text') and c.get('_gpu_failed'):
+                c['subtitle_text'] = process_gpu_queue(full_length=True)  # 重试全量
+                if c.get('subtitle_text'):
+                    full_transcribed += 1
+    if full_transcribed:
+        logger.info('全量转录: %d 条', full_transcribed)
+
+    # ⑦ 合并+排序
     from bili_tool.pool import merge_pool_results
     all_candidates = merge_pool_results(pool_results)
 
