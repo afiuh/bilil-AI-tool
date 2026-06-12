@@ -178,11 +178,11 @@ def check_ready(run_id: str) -> dict:
     return count_ready(run_id)
 
 
-def curate_from_cache(run_id: str, db_path: str, limit: int = 10) -> list[str]:
+def curate_from_cache(run_id: str, limit: int = 10) -> list[str]:
     """从缓存策展。返回入选的bvid列表。"""
     from bili_tool.cache import list_video_data, delete_videos
     from bili_tool.storage import Database
-    db = Database(db_path)
+    db = Database()
     candidates = list_video_data(run_id)
     result = curate(candidates, db, limit)
     selected_bvids = [c["bvid"] for c in result]
