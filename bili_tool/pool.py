@@ -278,8 +278,14 @@ def get_gpu_queue_size():
 
 
 def clear_pool_results():
+    """清空转录结果缓存 + 排空 GPU 队列。"""
     with _results_lock:
         _pool_results.clear()
+    while not _gpu_queue.empty():
+        try:
+            _gpu_queue.get_nowait()
+        except queue.Empty:
+            break
 
 # ═══════════════════════════════════════════
 # 分区黑名单 + 种子数据
