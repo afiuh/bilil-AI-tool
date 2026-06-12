@@ -218,17 +218,11 @@ def post_analyze_note(note_path: str, api_key: str) -> int:
             new_parts.append(body)
             continue
 
-        # 找原始字幕
+        # 找字幕：优先 note 内 ```text 块，次选视频缓存
         sub_match = re.search(r"```text\n(.+?)\n```", body, re.DOTALL)
-        if not sub_match:
-            new_parts.append(marker)
-            new_parts.append(body)
-            continue
+        subtitle = sub_match.group(1) if sub_match else ""
 
-        subtitle = sub_match.group(1)
-
-        # [IO] 优先从视频缓存读字幕和打分
-        bvid_match = re.search(r'BV[\w]+', section)
+        bvid_match = re.search(r'BV[\w]+', body)
         if bvid_match:
             bvid = bvid_match.group(0)
             from bili_tool.cache import load_video
@@ -237,7 +231,12 @@ def post_analyze_note(note_path: str, api_key: str) -> int:
                 cached_sub = cached.get('subtitle', '')
                 if cached_sub and len(cached_sub) > len(subtitle):
                     subtitle = cached_sub
-                    logger.debug(f"使用缓存字幕: {bvid} ({len(subtitle)}字)")
+                    logger.info(f"使用缓存字幕: {bvid} ({len(subtitle)}字)")
+
+        if not subtitle or len(subtitle) < 50:
+            new_parts.append(marker)
+            new_parts.append(body)
+            continue
 
         logger.info(f"正在分析: {title[:40]} ({len(subtitle)} 字)")
 
@@ -248,14 +247,16 @@ def post_analyze_note(note_path: str, api_key: str) -> int:
         else:
             analysis = analyze_subtitle(subtitle, api_key, title)
 
-        # 替换占位符 + 移除原始字幕块
-        old_placeholder = "### 🤖 Hermes 逐段分析\n<!-- 待 Hermes 分析后填充 -->\n> ⏳ 待分析..."
+        # 替换占位符（统一从 config 读取）
+        cfg = get_config()
+        placeholder = cfg.placeholder_analysis
+        old_section = f"### 📖 精校文本与批注\n{placeholder}"
         old_subtitle_block = re.search(
-            r"### 📜 完整字幕.*?\n```text\n.*?\n```\n\n", body, re.DOTALL
+            r"### 📜 完整字幕.*?\\n```text\\n.*?\\n```\\n\\n", body, re.DOTALL
         )
 
-        if old_placeholder in body:
-            body = body.replace(old_placeholder, f"### 📜 精校文本与批注\n\n{analysis}\n")
+        if old_section in body:
+            body = body.replace(old_section, f"### 📖 精校文本与批注\n\n{analysis}\n")
             updated += 1
 
         if old_subtitle_block:

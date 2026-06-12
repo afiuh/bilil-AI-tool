@@ -194,7 +194,7 @@ class PoolRunner:
         return score_l3(candidates, self.taste)
 
     def _is_satisfied(self, candidates):
-        if len(candidates) < 2:
+        if len(candidates) < 1:
             return False
         avg = sum(c.get("score_l3", 0) for c in candidates) / len(candidates)
         if avg < 0.3:
