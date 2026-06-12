@@ -292,3 +292,28 @@ def analyze_batch(
             logger.error(f"批量精校失败 [{title}]: {e}")
             c["analysis"] = f"（分析失败: {e}）"
     return candidates
+
+
+def analyze_from_cache(run_id: str, bvid: str, api_key: str) -> str | None:
+    """从缓存读字幕 → DeepSeek 精校 → 写回缓存。返回精校文本。"""
+    from bili_tool.cache import read_video, update_video
+
+    v = read_video(run_id, bvid)
+    if not v:
+        return None
+    subtitle = v.get('subtitle', '')
+    if not subtitle:
+        return None
+
+    title = v.get('title', '')
+    if len(subtitle) > 6000:
+        analysis = analyze_subtitle_split(subtitle, api_key, title)
+    else:
+        analysis = analyze_subtitle(subtitle, api_key, title)
+
+    if analysis:
+        update_video(run_id, bvid, {
+            'analysis': analysis,
+            'analyzed_at': __import__('datetime').datetime.now().isoformat(),
+        })
+    return analysis

@@ -313,6 +313,23 @@ python -m bili_tool.cli analyze --verbose
 ## 更新日志
 
 
+### v0.6.0 — 去中心化架构 (2026-06-12)
+
+**删除**
+- pool.py (PoolRunner / 全局GPU队列)
+- pipeline.py (run_daily / run_daily_5pool 大蛇脚本)
+- pipeline_watchdog.py / checkpoint.py / _cp_pause.py
+- _review.py / _review_cli.py / run_daily.py
+
+**新模块**
+- audio_downloader.py: 音频下载，写 audio_path 到缓存
+- transcribe_worker.py: 重写为 ProcessPoolExecutor 子进程转录
+- cache.py: 双层缓存(搜索批量文件 + 视频递进文件)
+
+**架构**
+去中心化工具模式。8个功能模块零耦合，通过缓存文件夹交换数据。
+智能体逐步操作每一步，崩一个不影响其他。
+
 ### v0.5.0 — 5池架构完善 + 视频级缓存 (2026-06-11)
 
 **新增**

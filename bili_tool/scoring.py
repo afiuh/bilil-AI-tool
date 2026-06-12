@@ -520,3 +520,38 @@ def score_single(bvid: str, taste=None) -> dict[str, Any] | None:
         return candidate
     candidates = score_l3(candidates, taste)
     return candidates[0] if candidates else candidate
+
+
+# ═══════════════════════════════════════════
+# 缓存集成：从缓存读视频、写回打分
+# ═══════════════════════════════════════════
+
+def score_videos(run_id: str, bvids: list[str], taste) -> list[str]:
+    """对缓存中的一批视频跑 L1→L2→L3，写回缓存。返回通过L3的bvid列表。"""
+    from bili_tool.cache import read_video, write_video
+
+    candidates = [read_video(run_id, b) for b in bvids if read_video(run_id, b)]
+    if not candidates:
+        return []
+
+    survivors = score_l1(candidates, taste)
+    survivors = score_l2(survivors, taste)
+    survivors = score_l3(survivors, taste)
+
+    passed = []
+    for c in survivors:
+        bvid = c['bvid']
+        write_video(run_id, bvid, c)
+        passed.append(bvid)
+
+    return passed
+
+
+def extract_subtitle_text(bvid: str) -> str | None:
+    """提取CC字幕文本。有返回文本，无返回None。"""
+    from bili_tool.bili_api import get_subtitle_text
+    try:
+        sub = get_subtitle_text(bvid)
+        return sub if sub and len(sub) >= 50 else None
+    except Exception:
+        return None

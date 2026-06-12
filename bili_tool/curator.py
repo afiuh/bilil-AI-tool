@@ -170,3 +170,23 @@ def enforce_diversity(
                 result.append(c)
                 used.add(c["bvid"])
     return result[:limit]
+
+
+def check_ready(run_id: str) -> dict:
+    """策展前检查：所有视频已完成打分+转录。"""
+    from bili_tool.cache import count_ready
+    return count_ready(run_id)
+
+
+def curate_from_cache(run_id: str, db, limit: int = 10) -> list[str]:
+    """从缓存策展。返回入选的bvid列表。"""
+    from bili_tool.cache import list_video_data, delete_videos
+    candidates = list_video_data(run_id)
+    result = curate(candidates, db, limit)
+    selected_bvids = [c["bvid"] for c in result]
+    all_bvids = list_video_data(run_id)
+    all_bvids = [c["bvid"] for c in all_bvids]
+    to_delete = [b for b in all_bvids if b not in selected_bvids]
+    if to_delete:
+        delete_videos(run_id, to_delete)
+    return selected_bvids

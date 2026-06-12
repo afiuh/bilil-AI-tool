@@ -1,433 +1,49 @@
 ---
 name: bili-tool
-description: B站自动化内容发现与推荐系统 — 四策略发现 → 三层打分 → GPU转录 → LLM精校 → Obsidian笔记的完整管道。运行、配置、故障排查指南。
-version: 1.3.0
-author: 陈懿灵
-created: 2026-06-10
+version: 2.0.0
+description: 去中心化B站内容工具箱。按功能拆分，通过缓存文件夹交换数据，智能体逐步操作。
 ---
 
-# bili-tool — B站自动化发现与推荐系统
+## 架构
 
-## 概述
+去中心化工具箱。功能模块间零耦合，只与缓存文件夹交互。
 
-`bili_tool` 是一个端到端的 B 站高质量内容发现管道：从收藏夹/关注链发现候选视频，通过三层打分漏斗筛选，利用 FunASR GPU 转录无字幕视频，最终由 DeepSeek API 逐段精校并写入 Obsidian 笔记。
+### 功能模块（8个）
 
-## 项目结构（v0.3.0 去中心化架构）
+| 模块 | 职责 | 关键函数 |
+|------|------|---------| 
+| discovery.py | 搜索发现 | discover_one_zone(), discover_and_cache() |
+| scoring.py | 三层打分 | score_videos(), extract_subtitle_text(), score_chicken_soup() |
+| audio_downloader.py | 音频下载 | download_audio() |
+| transcribe_worker.py | GPU转录 | transcribe_batch() |
+| curator.py | 策展去重 | check_ready(), curate_from_cache() |
+| analyzer.py | DeepSeek精校 | analyze_from_cache() |
+| notes.py | Obsidian笔记 | write_note_from_cache() |
+| cache.py | 缓存层 | create_run(), read_video(), write_video(), count_ready() |
 
-```
-bili_tool/
-├── pipeline.py        # 管道编排（一键运行入口）
-├── state.py           # 状态查询（纯读）
-├── notes.py           # Obsidian笔记读写（模板集中锁定）
-├── transcribe.py      # GPU转录 + B站API工具
-├── config.py          # 全局配置（11个可调阈值）
-├── storage.py         # SQLite 持久化
-├── taste.py           # 用户画像（话题/UP主权重/黑名单）
-├── discovery.py       # 四策略发现引擎 + 双池探索
-├── pool.py            # 5池并行引擎（PoolRunner + GPU队列）
-├── scoring.py         # L1/L2/L3 打分 + 鸡汤指数
-├── curator.py         # 策展（去重/排序/多样性 + ceiling）
-├── checkpoint.py      # 管道检查点（3时间节点 + 5池模式）
-├── feedback.py        # 三级反馈解析
-├── analyzer.py        # DeepSeek LLM 精校（分段API）
-├── gpu_monitor.py     # VRAM 监视
-├── cache.py           # 断点续传缓存
-├── notes.py           # Obsidian笔记（模板锁定）
+### 基础设施（9个）
 
-├── transcribe.py      # GPU转录 + 字幕工具
-├── _review.py         # 定期回顾引擎
-├── cli.py             # CLI（人用）
-├── __init__.py        # 统一导出
-├── .env               # 环境变量
-└── PROBLEMS.md        # 已知问题清单
-```
+config.py | taste.py | storage.py | feedback.py | gpu_monitor.py | bootstrap.py | bili_api.py | state.py | cli.py
 
+### 数据流
 
+所有模块通过缓存文件夹交换数据：
+  ~/.bili_tool/run/<run_id>/_search/   → 搜索批量文件
+  ~/.bili_tool/run/<run_id>/candidates/ → 视频递进文件
+  ~/.bili_tool/audio/                  → 音频文件
 
-## 数据流（v1.2.0）
+### 智能体操作流程
 
-```
-config + taste → 发现(5池) → L1 → L2(字幕→video_cache) → L3 → 策展 → 清理缓存 → 笔记骨架 → 精校(读缓存)
-```
-
-**关键变化**：
-- L2字幕持久化到 video_cache/BVxxx.json，精校从缓存读而非调API
-- 策展后自动清理落选视频缓存
-- 笔记不含原始字幕，只留精校文本
-- 2个检查点：字幕产出(L2后) + 精校后翻看笔记
-
-### 架构特点
-
-**去中心化工具箱 + 5池并行引擎（v0.4.0）**：
-- **人用**：`pipeline.run_daily()` 一键运行（旧），`pipeline.run_daily_5pool()` 5池并行（新）
-- **AI用**：`from bili_tool.pool import PoolRunner` 自由组合
-- **5池模式**：5个分区池并行搜索，GPU队列自适应调度，种子数据（141关注+收藏夹）注入搜索
-
-## 快速启动
-
-### 环境准备
-
-```bash
-# 1. 安装依赖
-cd bili_tool
-pip install requests numpy torch funasr openai-whisper
-
-# 2. 配置 .env
-# BILI_SESSDATA=你的Cookie
-# DEEPSEEK_API_KEY=sk-xxx
-# DEEPSEEK_BASE_URL=https://api.deepseek.com
-# OBSIDIAN_VAULT_PATH=C:/Users/c3458/Documents/Obsidian 笔记
-# OBSIDIAN_NOTE_DIR=笔记/AI推荐的视频
-
-# 3. 测试各模块
-python -m bili_tool.cli check-env      # 环境检查
-python -m bili_tool.cli test-bili      # B站 API 连通
-python -m bili_tool.cli test-asr       # GPU 转录测试
-python -m bili_tool.cli test-llm       # DeepSeek 精校测试
-```
-
-### 日常使用
-
-```bash
-# 完整每日管道（发现 → 打分 → 精校 → 写入笔记）
-python run_daily.py
-
-# 或分步执行：
-python -m bili_tool.cli discover      # 仅发现候选
-python -m bili_tool.cli score         # 仅打分
-python -m bili_tool.cli analyze       # 仅 LLM 精校
-python -m bili_tool.cli status        # 查看当前状态
-
-# 查看推荐历史
-python -m bili_tool.cli history       # 最近推荐列表
-python -m bili_tool.cli stats         # 统计信息
-
-# 手动添加黑名单
-python -m bili_tool.cli blacklist add <uid>  # 拉黑 UP 主
-python -m bili_tool.cli blacklist list        # 查看黑名单
-```
-
-
-
-## 管道守护（v1.3.0）
-
-### 自动巡检
-
-管道启动时自动开启守护线程，每 10 分钟检查：
-- GPU 队列大小（是否卡住）
-- 视频缓存数量（是否在产数据）
-- 连续 2 次无变化 → ⚠️ 疑似停滞
-- 状态实时写入 ~/.bili_tool/watchdog_status.json
-
-### AI 如何检查
-
-
-
-或直接读文件看状态。
+1. 搜索: discover_one_zone() × 5个分区 → 写入 search批量文件 → split_all_batches() → 拆分视频文件
+2. 打分: score_videos() → 读视频文件 → L1/L2/L3 → 写回
+3. 提取字幕: extract_subtitle_text() → 有CC的直接用
+4. 下载音频: download_audio() → 无CC的视频下载音频
+5. GPU转录: transcribe_batch() → ProcessPoolExecutor → 子进程写缓存
+6. 检查就绪: curator.check_ready() → 确认全部打分+转录完成
+7. 策展: curate_from_cache() → 去重排序 → 删落选文件
+8. 精校: analyze_from_cache() → DeepSeek → 写回缓存
+9. 笔记: write_note_from_cache() → 读入选文件 → 生成MD
 
 ### 触发词
 
-检查管道、管道状态、watchdog、守护检查
-
-### AI 如何检查
-
-管道运行时说"检查管道"即可。AI 读取 ~/.bili_tool/watchdog_status.json，按以下信号行动：
-
-| 信号 | 含义 | AI 做什么 |
-|------|------|----------|
-| status=✅ 正常 | 一切正常 | 告诉用户一切正常，继续等待 |
-| stuck_count≥2 | GPU队列和缓存已20分钟无变化 | 看 gpu_queue_size：>0 说明GPU卡住了（可能CUDA OOM）→ 建议重启终端；=0 说明没有待转录任务→正常 |
-| gpu_queue_size>5 连续两次 | 大量任务积压 | GPU跟不上，检查 nvidia-smi 显存 |
-| cache_count=0 超30分钟 | 管道严重故障 | 查日志找崩溃点，建议重启管道 |
-| 文件不存在 | 管道未运行 | 告诉用户管道没在跑 |
-
-每次检查后把信号和判断写进对话，等用户确认。
-
-## 管道详解
-
-### 阶段 1：发现（Discovery）
-
-四种策略并行运行：
-
-| 策略 | 来源 | 说明 |
-|------|------|------|
-| 关注蔓延 | 已关注 UP 主的关注链 | 3 跳 BFS，最大 200 候选 |
-| 关联推荐 | B站相关视频 API | 基于最近看过的视频 |
-| 关键词搜索 | `keywords` 配置 | 按口味画像中的关键词搜索 |
-| 分区探索 | 知识/人文历史分区 | 热门 + 最新排序 |
-
-**自动过滤**：已关注 UP 主（141 人）、纪录片/有声书/电视剧/儿童/催眠内容。
-
-### 阶段 2：三层打分（Scoring）
-
-- **L1 — 元数据硬过滤**：时长 < 5min 或 > 180min → 丢弃；播放量/弹幕/硬币等基础分
-- **L2 — 字幕采样分析**：有 CC 字幕直接用，无字幕触发 FunASR GPU 转录前 5 分钟；按关键词命中/论证密度评分；**内容类型过滤**：纪录片/有声书/电视剧/儿童/催眠 → 直接丢弃
-- **L3 — 完整深度分析**：LLM 逐段精校 + 批注；按用户画像维度深度评分
-
-### 阶段 3：GPU 转录（FunASR）
-
-- 模型：`paraformer-zh`（中文专精）
-- 设备：强制 `cuda:0`（RTX 4050 6GB）
-- 显存监视：85% 阈值自动停止新任务
-- 异步批量转录，每视频限制 5 分钟用于 L2 筛选
-
-### 阶段 4：LLM 精校（DeepSeek）
-
-**精校格式要求**：
-1. 标点补全 + 合理分段
-2. 转录错误修正（根据上下文推断）
-3. 逻辑不通处微调（保留原意）
-4. 逐段批注：💡亮点 / ⚠️不足
-5. 结尾总结分析
-
-**红线**：不允许省略内容。38 分钟视频必须完整覆盖所有段落，不能偷懒跳过后半段。
-
-### 阶段 5：写入 Obsidian
-
-模板包含：
-- 基本信息表（标题、UP 主、时长、BV 号、分类）
-- 内容分析（核心论点、论证结构、信息密度）
-- 精校文本与批注（完整字幕 + 💡/⚠️）
-- 建议表（关注/不关注/黑名单 + 理由）
-- 已阅/已交流复选框
-
-输出路径：`{OBSIDIAN_VAULT_PATH}/{OBSIDIAN_NOTE_DIR}/推荐-YYYY-MM-DD.md`
-
-## 反馈与交流闭环（v2.0）
-
-反馈不是单向的"用户输入→系统执行"，而是一个**完整的双向交流闭环**。只有交流完成后，才能进行数据标注和权重调整。
-
-### 交流闭环流程
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  1. 用户阅读推荐笔记                                          │
-│     ↓                                                        │
-│  2. 用户在 Obsidian 中写入批注                                │
-│     ├── 💬 逐段看法（穿插在精校文本中）                         │
-│     ├── 📝 视频评论（笔记末尾的总体评价）                       │
-│     └── 💬 总体反馈（笔记末尾的综合性反馈）                     │
-│     ↓                                                        │
-│  3. 助手读取笔记 → 解析三类输入 → 分级判断                     │
-│     ↓                                                        │
-│  4. 交流讨论（见下方"交流流程"）                               │
-│     ↓                                                        │
-│  5. 用户确认 → 勾选 ✅ 已交流 → 数据标注 → 权重调整            │
-│     ↓                                                        │
-│  6. 新画像维度写入 bili-tool-profile skill                    │
-│     ↓                                                        │
-│  7. 全部已阅 → 触发下一轮推荐生成                              │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 三级输入解析
-
-`feedback.py` 扫描 Obsidian 笔记，按标记匹配三类用户输入：
-
-| 标记 | 位置 | 含义 | 解析优先级 |
-|------|------|------|-----------|
-| `💬` | 穿插在精校文本段落间 | 用户对**具体论点/片段**的看法 | 最高（逐段匹配） |
-| `📝` | 笔记末尾 | 用户对该视频的**整体评论** | 中 |
-| `💬` | 笔记末尾（独立段落） | 用户对推荐系统的**总体反馈** | 低（影响画像） |
-
-**解析规则**：
-- `💬` 逐段看法 → 按段落编号匹配精校文本，提取具体评价对象
-- `📝` 视频评论 → 汇总为对该视频/UP主的综合判断
-- `💬` 总体反馈 → 提取系统改进方向和新画像维度种子
-
-### 分级执行策略
-
-根据信号明确程度，分为三个执行级别：
-
-#### L-auto：自动执行（无需确认）
-
-条件：信号足够明确，无歧义。
-
-| 信号 | 关键词 | 执行动作 |
-|------|--------|----------|
-| 强烈否定 | "完全不喜欢"、"别再推了"、"拉黑" | ① UP主加入黑名单 ② 对应风格标签降权 ③ 存入 `taste_profile` |
-| 明确喜欢 | "多推"、"喜欢"、"关注了" | ① 对应话题权重 +0.03 ② boost 该 UP 主风格 |
-| 内容类型排斥 | "又是纪录片"、"说了不要XXX" | ① 内容类型加入过滤列表 ② 回溯清理已推荐队列 |
-
-#### L-ask：等待确认（存疑信号）
-
-条件：信号包含判断但不够明确，需要用户澄清。
-
-| 信号示例 | 存疑点 | 行为 |
-|----------|--------|------|
-| "不够严谨" | 哪个维度不严谨？论证/数据/逻辑？ | 写入 `.pending_questions.json`，下次对话逐条确认 |
-| "还行吧" | 到底喜欢不喜欢？哪里还行哪里不行？ | 同上 |
-| "有点意思但..." | 转折后的真实态度是什么？ | 同上 |
-
-**`.pending_questions.json` 格式**：
-```json
-[
-  {
-    "id": "q_20260610_001",
-    "source_note": "推荐-2026-06-10.md",
-    "video_bv": "BV1xxx",
-    "trigger_signal": "不够严谨",
-    "context": "用户对XX视频的精校文本第3段的💬写了'这里不够严谨'",
-    "questions": ["具体指论证逻辑不严谨，还是数据引用不严谨？"],
-    "status": "pending",
-    "created": "2026-06-10T15:30:00"
-  }
-]
-```
-
-**确认时机**：每次对话开始时，助手检查 `.pending_questions.json`，逐条提出等待确认的问题，用户回答后标记 `resolved`。
-
-#### L-conversation：深度交流（提取新维度）
-
-条件：用户发表了深入观点，涉及推荐系统当前画像未覆盖的判断维度。
-
-| 场景 | 示例 | 行为 |
-|------|------|------|
-| 提出新评判标准 | "我更看重UP主有没有一手资料" | 讨论后提炼为新画像维度 |
-| 纠正系统判断 | "你以为我喜欢XX，其实我喜欢的不是XX而是YY" | 调整画像中的子维度权重 |
-| 哲学/方法论讨论 | 对某个分析框架的深入讨论 | 提取为该话题的偏好标注 |
-
-**交流流程**：
-1. 助手读取用户的 💬/📝/💬 三类输入
-2. 助手分析：判断合理性、提取核心关切、识别潜在新维度
-3. 与用户讨论：先复述理解 → 提出分析 → 询问确认/修正
-4. 用户确认后 → 勾选笔记中的 ✅ 已交流
-5. 新维度写入 `bili-tool-profile` skill（通过 `skill_manage(action='patch')`）
-
-### 已阅 vs 已交流
-
-笔记模板中有两个独立复选框：
-
-```
-- [ ] 已阅
-- [ ] 已交流
-```
-
-| 复选框 | 含义 | 何时勾选 |
-|--------|------|----------|
-| 已阅 | 用户已经看完了这个推荐 | 用户自行勾选，或看完后告诉助手勾选 |
-| 已交流 | 助手与用户就该视频完成了深度讨论 | **助手在交流闭环完成后勾选** |
-
-**关键约束**：
-- 生成新推荐的前置条件：最新笔记的**全部条目**都已阅（不要求已交流）
-- 权重调整的前置条件：该条目必须**已交流**（先讨论清楚再调整画像，避免误判）
-- 已交流后该条目不再重复讨论（除非用户主动提起）
-
-### 数据标注与权重调整
-
-仅在**交流完成后**执行：
-
-```
-已交流 → feedback.py 提取标注信号 → 更新 taste_profile 表
-  ├── 话题权重：±0.03/条
-  ├── UP主评分：+boost / -blacklist
-  ├── 风格标签：+激活 / -降权 / →置零
-  └── 新维度：写入 bili-tool-profile skill
-```
-
-**调整规则**：
-- 每条已交流的反馈最多影响 3 个权重维度
-- auto 级拉黑 → 对应风格标签直接置零（不等待已交流）
-- conversation 级新维度 → 经用户确认后写入画像，初始权重 0.5
-- 同一维度 3 次正向反馈 → 权重锁定（不再自动下调）
-
-## 定期回顾（每3天）
-
-AI 每 3 天（或用户说"做定期回顾"/"回顾最近笔记"时）自动触发一次深度回顾。
-
-### 数据范围
-
-扫描最近 3 天的所有推荐笔记，提取：
-- 所有 💬 逐段看法（按视频、按段落归类）
-- 所有 📝 视频评论
-- 所有 💬 总体反馈
-- 每条视频的精校文本、评分、推荐理由
-
-### 分析框架（5 层递增，逐层讨论）
-
-| 层次 | 分析内容 | AI 提出的问题 |
-|------|---------|-------------|
-| ① 内容层 | 3天推了什么：话题分布、质量分布、有无鸡汤漏网 | "这3天推荐的X条视频中，历史占Y条，你觉得这个比例合理吗？" |
-| ② 批注层 | 你写的 💬 逐段看法：哪些正面/负面、哪些维度反复提及 | "你连续3次提到'论证不严谨'，具体是指逻辑还是数据？" |
-| ③ 评论层 | 你的 📝 总体倾向：喜欢哪些 UP 主、排斥什么风格 | "你对UP主A的态度是'还行但不够深'，要不要降低他的权重？" |
-| ④ 反馈层 | 你的 💬 系统反馈：有没有新的画像维度种子 | "你提到'更看重一手资料'，要不要把这个加入画像维度？" |
-| ⑤ 优化层 | AI 综合上述提出具体优化建议 | "建议：① 拉黑UP主B ② 哲学方向权重+0.05 ③ 历史类减少推送" |
-
-### 讨论方式
-
-**不是单向报告**——AI 每层讲完后停下来，等待用户判断（同意/反对/补充/跳过）。全部讨论完成后：
-
-- 新维度写入 `bili-tool-profile` skill
-- 权重调整写入数据库 `taste_profile`
-- 讨论摘要记录到 Obsidian `笔记/定期回顾/回顾-YYYY-MM-DD.md`
-
-### 触发关键词
-
-- "做定期回顾"
-- "回顾最近笔记"
-- "最近推的怎么样"
-- "分析一下这几天的推荐"
-
-### 代码入口
-
-
-
-
-
-## 推荐节奏
-
-每天凌晨 3 点检查最新笔记：
-- **全部已阅** → 生成新推荐
-- **有待阅** → 跳过，等待用户看完
-
-笔记标题精确到小时：`推荐-2026-06-10-03.md`
-
-## 故障排查
-
-### B站 API 403
-
-```
-症状：B站接口返回 403
-原因：SESSDATA 过期
-解决：重新获取 B站 Cookie，更新 .env 中的 BILI_SESSDATA
-```
-
-### GPU 转录失败
-
-```
-症状：FunASR 加载失败或 CUDA OOM
-检查：
-1. nvidia-smi 确认 GPU 可用
-2. 显存是否被其他进程占用
-3. 尝试重启 Python 进程释放显存
-```
-
-### DeepSeek API 超时
-
-```
-症状：精校中断或返回不完整
-原因：长视频字幕超过 token 限制
-解决：config.py 中调整 LLM_MAX_TOKENS 或分段大小
-```
-
-### 笔记未生成
-
-```
-场景：运行 run_daily.py 但没有新笔记
-检查：
-1. cli.py status 查看待阅笔记数
-2. 是否仍有未阅笔记导致跳过
-3. discovery 阶段是否有候选产出
-```
-
-## 关键配置项
-
-| 配置 | 位置 | 说明 |
-|------|------|------|
-| `BILI_SESSDATA` | `.env` | B站登录 Cookie |
-| `DEEPSEEK_API_KEY` | `.env` | DeepSeek API 密钥 |
-| `OBSIDIAN_VAULT_PATH` | `.env` | Obsidian 仓库路径 |
-| `MIN_DURATION` | `config.py` | 最小时长限制（秒） |
-| `MAX_DURATION` | `config.py` | 最大时长限制（秒） |
-| `VRAM_THRESHOLD` | `gpu_monitor.py` | GPU 显存阈值（0.85） |
-| `ASR_SAMPLE_SECONDS` | `scoring.py` | L2 转录采样时长 |
+搜索、打分、转录、策展、精校、笔记、检查状态、清理缓存

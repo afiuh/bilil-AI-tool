@@ -228,3 +228,65 @@ def discover_by_partition(
         except Exception:
             continue
     return result[:limit]
+
+
+
+# ═══════════════════════════════════════════
+# 缓存集成：直接输出到缓存文件夹
+# ═══════════════════════════════════════════
+
+def discover_and_cache(run_id: str, taste, seeds: dict, zones: list[int]) -> dict:
+    """搜索全部 → 写入缓存 → 拆分视频文件。返回统计。"""
+    from bili_tool.cache import write_search_batch, split_all_batches
+
+    results = {}
+    for i, zone_id in enumerate(zones):
+        pid = f'pool{i+1}'
+        batch = discover_one_zone(pid, zone_id, taste, seeds)
+        write_search_batch(run_id, batch)
+        results[pid] = len(batch.get('candidates', []))
+
+    total = split_all_batches(run_id)
+    return {'pools': results, 'total_videos': total}
+
+
+PARTITION_KEYWORDS = {
+    207: ['深度', '制度', '博弈', '权力'],
+    36: ['哲学', '辩证法', '社会学'],
+    181: ['影评', '剧评', '解读'],
+    122: ['经济', '社会', '历史'],
+    188: ['科技', '科学'],
+    35: ['学习方法', '思维'],
+}
+
+
+def discover_one_zone(pool_id: str, zone_id: int, taste, seeds: dict) -> dict:
+    """搜一个分区。返回批量文件数据。"""
+    from bili_tool.bili_api import search_videos
+    import random
+
+    kw = PARTITION_KEYWORDS.get(zone_id, ['深度', '解读'])
+    keyword = random.choice(kw)
+
+    candidates = []
+    # 关键词搜索
+    for page in [1]:
+        for sort in ['hot']:
+            try:
+                results = search_videos(keyword, page=page, page_size=15)
+                for r in results:
+                    r['source'] = 'search'
+                    r['pool_id'] = pool_id
+                    r['partition_id'] = zone_id
+                candidates.extend(results)
+            except Exception:
+                continue
+
+    return {
+        'pool_id': pool_id,
+        'zone_id': zone_id,
+        'keyword': keyword,
+        'searched_at': __import__('datetime').datetime.now().isoformat(),
+        'total': len(candidates),
+        'candidates': candidates,
+    }
