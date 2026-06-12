@@ -238,9 +238,11 @@ def process_gpu_queue(device="cuda:0"):
 def _transcribe_one(task, device, full_length: bool = False):
     import requests, tempfile, os
     from bili_tool.config import get_config
-    import torch
+    import torch, os
+    os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
     from bili_tool.bili_api import transcribe_batch_gpu
     cfg = get_config()
     bvid = task["bvid"]
