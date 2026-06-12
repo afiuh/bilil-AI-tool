@@ -276,8 +276,11 @@ def run_daily_5pool(
     # ⑤ 停止GPU消费者 + 清空剩余队列
     gpu_done.set()
     gpu_thread.join(timeout=5)
-    remaining = process_gpu_queue()
-    logger.info("GPU转录完成: %d 条", remaining)
+    try:
+        remaining = process_gpu_queue()
+        logger.info("GPU转录完成: %d 条", remaining)
+    except Exception as e:
+        logger.error("GPU转录阶段崩溃: %s (已有缓存数据保留)", e)
     clear_pool_results()
 
     # ⑥ 全量转录（L2只采样，L3需要全文）

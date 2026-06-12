@@ -209,7 +209,7 @@ class PoolRunner:
         return rank(candidates, sort_by="score_l3")[:n]
 
 
-def process_gpu_queue(device="cuda:0"):
+def process_gpu_queue(device="cuda:0", full_length: bool = False):
     processed = 0
     while not _gpu_queue.empty():
         if not vram_safe_to_transcribe():
@@ -222,7 +222,7 @@ def process_gpu_queue(device="cuda:0"):
         pid = task["pool_id"]
         bvid = task["bvid"]
         try:
-            text = _transcribe_one(task, device)
+            text = _transcribe_one(task, device, full_length)
             ok = text and len(text) >= 50
             with _results_lock:
                 _pool_results.setdefault(pid, {})[bvid] = text if ok else ""
@@ -235,42 +235,15 @@ def process_gpu_queue(device="cuda:0"):
     return processed
 
 
-def _transcribe_one(task, device, full_length: bool = False):
-    import requests, tempfile, os
+def _transcribe_one(task, device=None, full_length: bool = False):
+    """子进程转录。独立CUDA上下文，OS强制回收显存。"""
     from bili_tool.config import get_config
-    import torch, os, gc
-    os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
-    if torch.cuda.is_available():
-        gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
-        # 限制 PyTorch 最多用 3.5 GiB（留空间给 FunASR 模型）
-        try:
-            torch.cuda.set_per_process_memory_fraction(0.58)  # 3.5/6 ≈ 0.58
-        except Exception:
-            pass
-    from bili_tool.bili_api import transcribe_batch_gpu
     cfg = get_config()
-    bvid = task["bvid"]
-    resp = requests.get(task["audio_url"], headers=cfg.headers, cookies=cfg.cookie_dict, timeout=120, stream=True)
-    resp.raise_for_status()
-    tmp = tempfile.NamedTemporaryFile(suffix=".m4a", delete=False)
-    try:
-        dl = 0
-        for chunk in resp.iter_content(8192):
-            if chunk:
-                tmp.write(chunk)
-                dl += len(chunk)
-                if not full_length and dl >= 600 * 16000:
-                    break  # 采样模式：只转录前10分钟
-        tmp.close()
-        results = transcribe_batch_gpu({bvid: (tmp.name, None)})
-        return results.get(bvid, "")
-    finally:
-        try:
-            os.unlink(tmp.name)
-        except Exception:
-            pass
+    audio_path = _download_audio(task, cfg, full_length)
+    if not audio_path:
+        return ""
+    result = _run_transcribe_subprocess(audio_path, task["bvid"])
+    return result.get("text", "")
 
 
 def get_gpu_queue_size():

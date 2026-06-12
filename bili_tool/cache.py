@@ -120,6 +120,7 @@ def cache_scoring(bvid: str, candidate: dict) -> None:
     existing["up_name"] = candidate.get("up_name", existing.get("up_name", ""))
     existing["duration_sec"] = candidate.get("duration_sec", existing.get("duration_sec", 0))
     existing["partition"] = candidate.get("partition", existing.get("partition", ""))
+    existing["pool_id"] = candidate.get("_pool_id", existing.get("pool_id", "unknown"))
     existing["scoring"] = {
         "l1": candidate.get("score_l1", existing.get("scoring", {}).get("l1", 0)),
         "l2": candidate.get("score_l2", existing.get("scoring", {}).get("l2", 0)),
