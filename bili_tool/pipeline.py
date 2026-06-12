@@ -221,6 +221,8 @@ def run_daily_5pool(
 
     from bili_tool.bootstrap import ensure_fresh
     ensure_fresh()
+    from bili_tool.pipeline_watchdog import start_watchdog, stop_watchdog
+    start_watchdog()
     logger.info("=== 5池管道启动 ===")
 
     # ① 随机选5个分区
@@ -348,5 +350,6 @@ def run_daily_5pool(
         p = c.get("partition", "其他")
         topic_dist[p] = topic_dist.get(p, 0) + 1
     logger.info("产出: %d条, 分区: %s", len(final), topic_dist)
+    stop_watchdog()
     logger.info("管道完成: %s", note_path)
     return note_path
