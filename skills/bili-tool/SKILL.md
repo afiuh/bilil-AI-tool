@@ -1,7 +1,7 @@
 ---
 name: bili-tool
 description: B站自动化内容发现与推荐系统 — 四策略发现 → 三层打分 → GPU转录 → LLM精校 → Obsidian笔记的完整管道。运行、配置、故障排查指南。
-version: 1.2.0
+version: 1.3.0
 author: 陈懿灵
 created: 2026-06-10
 ---
@@ -106,6 +106,36 @@ python -m bili_tool.cli stats         # 统计信息
 python -m bili_tool.cli blacklist add <uid>  # 拉黑 UP 主
 python -m bili_tool.cli blacklist list        # 查看黑名单
 ```
+
+
+
+## 管道守护（v1.3.0）
+
+### 自动巡检
+
+管道启动时自动开启守护线程，每 10 分钟检查：
+- GPU 队列大小（是否卡住）
+- 视频缓存数量（是否在产数据）
+- 连续 2 次无变化 → ⚠️ 疑似停滞
+- 状态实时写入 ~/.bili_tool/watchdog_status.json
+
+### AI 如何检查
+
+
+
+或直接读文件看状态。
+
+### 触发词
+
+检查管道、管道状态、watchdog、守护检查
+
+### 响应规则
+
+| 状态 | AI 行为 |
+|------|--------|
+| ✅ 正常 | 无需操作 |
+| ⚠️ 疑似停滞 | 检查日志，判断是否需要重启管道 |
+| 文件不存在 | 管道未在运行 |
 
 ## 管道详解
 

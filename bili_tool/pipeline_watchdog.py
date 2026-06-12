@@ -63,6 +63,19 @@ class PipelineWatchdog:
         self._last_gpu_queue_size = qsize
         self._last_cache_count = cache_count
 
+        # 写状态文件供 Hermes 读取
+        import json
+        status_file = Path.home() / '.bili_tool' / 'watchdog_status.json'
+        status_file.parent.mkdir(parents=True, exist_ok=True)
+        import datetime
+        status_file.write_text(json.dumps({
+            'timestamp': datetime.datetime.now().isoformat(),
+            'status': status,
+            'gpu_queue_size': qsize,
+            'cache_count': cache_count,
+            'stuck_count': self._stuck_count,
+        }, ensure_ascii=False), encoding='utf-8')
+
 
 # ── 便捷函数 ──
 
