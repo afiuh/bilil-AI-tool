@@ -374,7 +374,7 @@ def _run_transcribe_subprocess(audio_path: str, bvid: str) -> dict:
     try:
         result = subprocess.run(
             [sys.executable, str(worker), audio_path, bvid],
-            capture_output=True, text=True, timeout=300,
+            capture_output=True, text=True,
         )
         return json.loads(result.stdout.strip())
     except Exception as e:
