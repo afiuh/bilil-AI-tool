@@ -45,9 +45,21 @@ def download_audio(run_id: str, bvid: str, max_sec: int | None = None) -> str | 
                     downloaded += len(chunk)
                     if max_bytes and downloaded >= max_bytes:
                         break
-        update_video(run_id, bvid, {"audio_path": str(path)})
+        # 转 wav (whisper.cpp 需要)
+        wav_path = path.with_suffix('.wav')
+        import subprocess
+        subprocess.run(
+            ['ffmpeg', '-i', str(path), '-ar', '16000', '-ac', '1', '-y', str(wav_path)],
+            capture_output=True, timeout=60,
+        )
+        if wav_path.exists():
+            path.unlink()  # 删 m4a，留 wav
+            update_video(run_id, bvid, {"audio_path": str(wav_path)})
+        else:
+            update_video(run_id, bvid, {"audio_path": str(path)})
+
         logger.info("音频下载完成: %s (%d KB)", bvid, downloaded // 1024)
-        return str(path)
+        return str(wav_path if wav_path.exists() else path)
     except Exception as e:
         logger.error("下载失败 %s: %s", bvid, e)
         if path.exists():
