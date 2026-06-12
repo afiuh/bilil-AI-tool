@@ -165,7 +165,7 @@ class PoolRunner:
         _gpu_queue.put({"pool_id": self.pool_id, "bvid": bvid, "audio_url": url})
 
     def _collect_transcriptions(self, candidates):
-        dl = time.time() + 30
+        dl = time.time() + 120
         pending = {c["bvid"]: c for c in candidates
                    if not c.get("subtitle_text") and c.get("subtitle_text") != ""}
         if not pending:
