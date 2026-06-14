@@ -7,7 +7,7 @@ from bili_tool.cache import AUDIO_DIR, update_video, read_video
 logger = logging.getLogger(__name__)
 
 
-def download_audio(run_id: str, bvid: str, max_sec: int | None = None) -> str | None:
+def download_audio(run_id: str, bvid: str, max_sec: int = 3600) -> str | None:
     """下载视频音频到缓存目录。max_sec=None=不限时。返回路径或None。"""
     from bili_tool.config import get_config
     from bili_tool.bili_api import _get_cid
@@ -36,7 +36,7 @@ def download_audio(run_id: str, bvid: str, max_sec: int | None = None) -> str | 
     try:
         resp = requests.get(audio_url, headers=cfg.headers, cookies=cfg.cookie_dict, timeout=300, stream=True)
         resp.raise_for_status()
-        max_bytes = max_sec * 16000 * 2 if max_sec else None
+        max_bytes = max_sec * 16000 * 2
         downloaded = 0
         with open(path, "wb") as f:
             for chunk in resp.iter_content(8192):
