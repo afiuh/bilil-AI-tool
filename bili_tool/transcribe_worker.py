@@ -21,8 +21,9 @@ def _transcribe_in_subprocess(audio_path: str, bvid: str, cache_path: str) -> bo
     try:
         result = subprocess.run(
             [EXE, "-m", MODEL, "-f", audio_path,
-             "-l", "zh", "--output-txt", "-of", out_base],
-            capture_output=True, text=True, timeout=900,
+             "-l", "zh", "--output-txt", "-of", out_base,
+             "--no-timestamps"],  # 去掉时间戳，减少输出
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=900,
         )
         out_txt = out_base + ".txt"
         if not Path(out_txt).exists():
